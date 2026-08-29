@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>BN-HTR — Bangla Handwriting Recognition</title>
+  <meta http-equiv="Cache-Control" content="no-store" />
+  <!-- ui_version: {{ ui_version }} -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Figtree:wght@400;500;600;700&family=Noto+Sans+Bengali:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -408,7 +410,7 @@
           />
           <button class="btn btn-ghost" id="testBtn" type="button">Test</button>
         </div>
-        <p class="hint">Leave empty for this same server, or paste a Hugging Face / remote API root (no trailing slash).</p>
+        <p class="hint">Local: leave empty. Hugging Face Gradio Space: paste <code>https://YOUR-SPACE.hf.space</code> (no trailing slash).</p>
       </div>
 
       <div class="modes" role="tablist" aria-label="Recognition mode">
@@ -449,19 +451,17 @@
   </main>
 
   <script>
-    // Change this when hosting the UI separately from the API
-    // (e.g. Hugging Face Space, Railway, your own server).
-    // Examples:
-    //   const DEFAULT_BASE_URL = "";  // same origin as this page
-    //   const DEFAULT_BASE_URL = "https://USERNAME-bn-htr.hf.space";
-    //   const DEFAULT_BASE_URL = "http://127.0.0.1:5000";
+    // Empty = talk to this same page's server (local `python app.py`).
+    // For a remote Hugging Face Gradio Space, paste e.g.:
+    //   https://muddasir-faiyaj-bn-htr.hf.space
     const DEFAULT_BASE_URL = "";
-    const BASE_URL_STORAGE_KEY = "bn-htr-api-base-url";
+    const BASE_URL_STORAGE_KEY = "bn-htr-api-base-url-v2";
 
     const state = {
       mode: "page",
       file: null,
       lastText: "",
+      apiKind: null, // "flask" | "gradio"
     };
 
     const dropzone = document.getElementById("dropzone");
@@ -482,7 +482,16 @@
     const lineList = document.getElementById("lineList");
 
     function normalizeBaseUrl(value) {
-      return (value || "").trim().replace(/\/+$/, "");
+      let v = (value || "").trim().replace(/\/+$/, "");
+      if (!v) return "";
+      // Common typos
+      v = v.replace(/^ttps:\/\//i, "https://");
+      v = v.replace(/^ttp:\/\//i, "http://");
+      // Bare host / hf.space without scheme
+      if (!/^https?:\/\//i.test(v)) {
+        v = `https://${v}`;
+      }
+      return v.replace(/\/+$/, "");
     }
 
     function getBaseUrl() {
@@ -495,23 +504,44 @@
       return base ? `${base}${p}` : p;
     }
 
+    function looksLikeHfSpace(base) {
+      if (!base) {
+        return /\.hf\.space$/i.test(location.hostname);
+      }
+      try {
+        const host = new URL(base).hostname;
+        return /\.hf\.space$/i.test(host) || /huggingface\.co$/i.test(host);
+      } catch (_) {
+        return /hf\.space/i.test(base);
+      }
+    }
+
     function loadSavedBaseUrl() {
       let saved = null;
       try {
         saved = localStorage.getItem(BASE_URL_STORAGE_KEY);
       } catch (_) { /* ignore */ }
-      baseUrlInput.value = saved !== null ? saved : DEFAULT_BASE_URL;
+      baseUrlInput.value = normalizeBaseUrl(saved !== null ? saved : DEFAULT_BASE_URL);
+      baseUrlInput.placeholder = "https://your-space.hf.space  (or leave empty for local)";
     }
 
     function persistBaseUrl() {
+      const v = normalizeBaseUrl(baseUrlInput.value);
+      baseUrlInput.value = v;
       try {
-        localStorage.setItem(BASE_URL_STORAGE_KEY, normalizeBaseUrl(baseUrlInput.value));
+        localStorage.setItem(BASE_URL_STORAGE_KEY, v);
       } catch (_) { /* ignore */ }
     }
 
     loadSavedBaseUrl();
-    baseUrlInput.addEventListener("change", persistBaseUrl);
-    baseUrlInput.addEventListener("blur", persistBaseUrl);
+    baseUrlInput.addEventListener("change", () => {
+      state.apiKind = null;
+      persistBaseUrl();
+    });
+    baseUrlInput.addEventListener("blur", () => {
+      state.apiKind = null;
+      persistBaseUrl();
+    });
 
     document.querySelectorAll(".modes button").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -588,17 +618,195 @@
 
     clearBtn.addEventListener("click", clearAll);
 
+    async function readJsonOrThrow(res, label) {
+      const text = await res.text();
+      const ctype = (res.headers.get("content-type") || "").toLowerCase();
+      if (!ctype.includes("application/json") && text.trimStart().startsWith("<")) {
+        throw new Error(
+          `${label} returned a web page, not JSON. ` +
+            `For Hugging Face Gradio Spaces use the Space root URL ` +
+            `(https://….hf.space). For local Flask leave the box empty.`
+        );
+      }
+      let data;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch (_) {
+        throw new Error(
+          `${label} returned non-JSON (${res.status}). Check the API base URL.`
+        );
+      }
+      if (!res.ok) {
+        const msg =
+          (data && (data.error || data.detail)) ||
+          `${label} failed (${res.status})`;
+        throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
+      }
+      return data;
+    }
+
+    async function tryFlask() {
+      const healthRes = await fetch(apiUrl("/health"));
+      const ctype = (healthRes.headers.get("content-type") || "").toLowerCase();
+      if (!healthRes.ok || !ctype.includes("application/json")) {
+        return null;
+      }
+      return "flask";
+    }
+
+    async function tryGradio() {
+      const infoRes = await fetch(apiUrl("/gradio_api/info"));
+      const ctype = (infoRes.headers.get("content-type") || "").toLowerCase();
+      if (!infoRes.ok || !ctype.includes("application/json")) {
+        return null;
+      }
+      return "gradio";
+    }
+
+    /** Detect Flask REST vs Gradio Space. HF Spaces are Gradio — check those first. */
+    async function detectApiKind(force = false) {
+      if (!force && state.apiKind) return state.apiKind;
+      const base = getBaseUrl();
+      const preferGradio = looksLikeHfSpace(base);
+
+      const order = preferGradio
+        ? [tryGradio, tryFlask]
+        : [tryFlask, tryGradio];
+
+      for (const probe of order) {
+        try {
+          const kind = await probe();
+          if (kind) {
+            state.apiKind = kind;
+            return kind;
+          }
+        } catch (_) { /* try next */ }
+      }
+
+      state.apiKind = null;
+      throw new Error(
+        "Could not reach BN-HTR. Local: leave API URL empty and run `python app.py`. " +
+          "Hugging Face: paste https://YOUR-SPACE.hf.space (Gradio Space)."
+      );
+    }
+
+    async function uploadToGradio(file) {
+      const form = new FormData();
+      form.append("files", file, file.name || "image.jpg");
+      const res = await fetch(apiUrl("/gradio_api/upload"), {
+        method: "POST",
+        body: form,
+      });
+      const paths = await readJsonOrThrow(res, "Gradio upload");
+      const path = Array.isArray(paths) ? paths[0] : paths;
+      if (!path) throw new Error("Gradio upload returned no file path");
+      return path;
+    }
+
+    async function callGradio(endpoint, fileData) {
+      const callRes = await fetch(apiUrl(`/gradio_api/call/v2/${endpoint}`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          image_path: {
+            path: fileData,
+            meta: { _type: "gradio.FileData" },
+            orig_name: state.file.name || "image.jpg",
+          },
+        }),
+      });
+      const callData = await readJsonOrThrow(callRes, "Gradio call");
+      const eventId = callData.event_id;
+      if (!eventId) throw new Error("Gradio call did not return event_id");
+
+      const pollRes = await fetch(apiUrl(`/gradio_api/call/${endpoint}/${eventId}`));
+      if (!pollRes.ok) {
+        throw new Error(`Gradio poll failed (${pollRes.status})`);
+      }
+      const body = await pollRes.text();
+      const blocks = body.split(/\n\n+/);
+      let payload = null;
+      let sawError = null;
+      for (const block of blocks) {
+        const lines = block.split(/\n/);
+        let event = "message";
+        let dataLine = "";
+        for (const line of lines) {
+          if (line.startsWith("event:")) event = line.slice(6).trim();
+          if (line.startsWith("data:")) dataLine += line.slice(5).trim();
+        }
+        if (event === "error") {
+          try {
+            sawError = JSON.parse(dataLine);
+          } catch (_) {
+            sawError = dataLine || "Gradio error";
+          }
+        }
+        if (event === "complete" && dataLine) {
+          payload = JSON.parse(dataLine);
+        }
+      }
+      if (sawError) {
+        const msg =
+          typeof sawError === "string"
+            ? sawError
+            : sawError.error || sawError.message || JSON.stringify(sawError);
+        throw new Error(msg);
+      }
+      if (payload == null) {
+        throw new Error(
+          "Gradio did not return a result (Space may be sleeping — open the Space once, wait for it to wake, then retry)."
+        );
+      }
+      const text = Array.isArray(payload) ? payload[0] : payload;
+      return typeof text === "string" ? text : String(text ?? "");
+    }
+
+    async function recognizeViaGradio() {
+      const uploaded = await uploadToGradio(state.file);
+      const endpoint = state.mode === "page" ? "recognize_page" : "recognize_line";
+      const text = await callGradio(endpoint, uploaded);
+      if (state.mode === "page") {
+        const lines = text.split("\n");
+        return {
+          lines,
+          full_text: text,
+          line_count: lines.filter((l) => l.length).length || lines.length,
+        };
+      }
+      return { text };
+    }
+
+    async function recognizeViaFlask() {
+      const endpoint = apiUrl(
+        state.mode === "page" ? "/recognize_page" : "/recognize_line"
+      );
+      const form = new FormData();
+      form.append("image", state.file);
+      const res = await fetch(endpoint, { method: "POST", body: form });
+      return readJsonOrThrow(res, endpoint);
+    }
+
     testBtn.addEventListener("click", async () => {
       persistBaseUrl();
+      state.apiKind = null;
       setStatus("Checking API…", "busy");
       try {
-        const res = await fetch(apiUrl("/health"));
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Health check failed");
-        setStatus(`Connected · device: ${data.device || "unknown"}`);
+        const kind = await detectApiKind(true);
+        if (kind === "flask") {
+          const res = await fetch(apiUrl("/health"));
+          const data = await readJsonOrThrow(res, "Health check");
+          setStatus(`Connected (Flask) · device: ${data.device || "unknown"}`);
+        } else {
+          const res = await fetch(apiUrl("/gradio_api/info"));
+          const data = await readJsonOrThrow(res, "Gradio info");
+          const endpoints =
+            Object.keys(data.named_endpoints || {}).join(", ") || "ok";
+          setStatus(`Connected (Gradio Space) · ${endpoints}`);
+        }
       } catch (err) {
         setStatus(
-          err.message || "Could not reach API. Check the base URL (and CORS if remote).",
+          err.message || "Could not reach API. Check the base URL.",
           "error"
         );
       }
@@ -618,12 +826,6 @@
       if (!state.file) return;
 
       persistBaseUrl();
-      const endpoint = apiUrl(
-        state.mode === "page" ? "/recognize_page" : "/recognize_line"
-      );
-      const form = new FormData();
-      form.append("image", state.file);
-
       runBtn.disabled = true;
       clearBtn.disabled = true;
       setStatus(
@@ -635,16 +837,11 @@
       results.classList.remove("show");
 
       try {
-        const res = await fetch(endpoint, { method: "POST", body: form });
-        let data;
-        try {
-          data = await res.json();
-        } catch (_) {
-          throw new Error(`Bad response from ${endpoint} (${res.status})`);
-        }
-        if (!res.ok) {
-          throw new Error(data.error || "Recognition failed");
-        }
+        const kind = await detectApiKind();
+        const data =
+          kind === "gradio"
+            ? await recognizeViaGradio()
+            : await recognizeViaFlask();
 
         if (state.mode === "page") {
           state.lastText = data.full_text || "";
@@ -660,13 +857,15 @@
             lineList.appendChild(row);
           });
           results.classList.add("show");
-          setStatus(`Done · automatically detected ${count} line${count === 1 ? "" : "s"}.`);
+          setStatus(
+            `Done · automatically detected ${count} line${count === 1 ? "" : "s"} (${kind}).`
+          );
         } else {
           state.lastText = data.text || "";
           fullText.textContent = state.lastText || "(no text detected)";
           lineList.innerHTML = "";
           results.classList.add("show");
-          setStatus("Done.");
+          setStatus(`Done (${kind}).`);
         }
       } catch (err) {
         setStatus(err.message || "Something went wrong.", "error");
