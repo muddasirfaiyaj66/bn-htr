@@ -1,0 +1,15 @@
+# Install PyTorch separately first with the correct CUDA build, e.g.:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
+# Your driver (580.97 / CUDA 13.0) is backward compatible with cu121/cu124 wheels,
+# so use cu124 (or cu121 if cu124 gives issues) — do NOT expect a "cu130" wheel to exist yet.
+
+opencv-python
+numpy
+pandas
+openpyxl
+pillow
+scikit-learn
+editdistance
+tqdm
+matplotlib
+flask

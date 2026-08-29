@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BN-HTR — Bangla Handwriting Recognition</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Figtree:wght@400;500;600;700&family=Noto+Sans+Bengali:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --ink: #12241c;
+      --ink-soft: #2a4036;
+      --muted: #5c7268;
+      --paper: #e8efe9;
+      --surface: rgba(255, 255, 255, 0.72);
+      --accent: #0d6b45;
+      --accent-deep: #084f33;
+      --accent-glow: rgba(13, 107, 69, 0.18);
+      --danger: #a33a2f;
+      --line: rgba(18, 36, 28, 0.12);
+      --shadow: 0 18px 50px rgba(18, 36, 28, 0.12);
+      --radius: 18px;
+      --font-brand: "Fraunces", Georgia, serif;
+      --font-ui: "Figtree", system-ui, sans-serif;
+      --font-bn: "Noto Sans Bengali", "Figtree", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      color: var(--ink);
+      font-family: var(--font-ui);
+      background:
+        radial-gradient(1200px 700px at 12% -10%, #c5dfd0 0%, transparent 55%),
+        radial-gradient(900px 600px at 100% 0%, #d7e4dc 0%, transparent 50%),
+        linear-gradient(165deg, #dfeae3 0%, #cfdcd4 45%, #b9cbc0 100%);
+      background-attachment: fixed;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.35;
+      background-image:
+        repeating-linear-gradient(
+          0deg,
+          transparent,
+          transparent 2px,
+          rgba(18, 36, 28, 0.015) 2px,
+          rgba(18, 36, 28, 0.015) 3px
+        );
+    }
+
+    .wrap {
+      position: relative;
+      width: min(920px, calc(100% - 2rem));
+      margin: 0 auto;
+      padding: 2.5rem 0 4rem;
+    }
+
+    .brand {
+      animation: rise 0.7s ease both;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-family: var(--font-brand);
+      font-size: clamp(2.4rem, 6vw, 3.6rem);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.05;
+      color: var(--ink);
+    }
+
+    .brand h1 span {
+      color: var(--accent);
+    }
+
+    .brand p {
+      margin: 0.75rem 0 0;
+      max-width: 34rem;
+      color: var(--muted);
+      font-size: 1.05rem;
+      line-height: 1.5;
+    }
+
+    .panel {
+      margin-top: 2rem;
+      padding: 1.35rem;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      backdrop-filter: blur(14px);
+      box-shadow: var(--shadow);
+      animation: rise 0.8s ease 0.08s both;
+    }
+
+    .base-url {
+      display: grid;
+      gap: 0.4rem;
+      margin-bottom: 1.1rem;
+    }
+
+    .base-url label {
+      font-size: 0.82rem;
+      font-weight: 650;
+      color: var(--ink-soft);
+      letter-spacing: 0.02em;
+    }
+
+    .base-url-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 0.5rem;
+    }
+
+    .base-url input {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 0.7rem 0.9rem;
+      font: 500 0.92rem var(--font-ui);
+      color: var(--ink);
+      background: rgba(255, 255, 255, 0.85);
+      outline: none;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .base-url input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    .base-url .hint {
+      margin: 0;
+      font-size: 0.8rem;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    .modes {
+      display: flex;
+      gap: 0.4rem;
+      padding: 0.3rem;
+      width: fit-content;
+      background: rgba(18, 36, 28, 0.06);
+      border-radius: 999px;
+    }
+
+    .modes button {
+      border: 0;
+      background: transparent;
+      color: var(--ink-soft);
+      font: 600 0.92rem var(--font-ui);
+      padding: 0.55rem 1rem;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
+    }
+
+    .modes button.active {
+      background: #fff;
+      color: var(--accent-deep);
+      box-shadow: 0 4px 14px rgba(18, 36, 28, 0.1);
+    }
+
+    .modes button:hover:not(.active) {
+      color: var(--ink);
+    }
+
+    .drop {
+      margin-top: 1.15rem;
+      position: relative;
+      border: 1.5px dashed rgba(13, 107, 69, 0.35);
+      border-radius: 14px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0.25));
+      min-height: 220px;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      padding: 1.5rem;
+      cursor: pointer;
+      transition: border-color 0.2s ease, background 0.2s ease, transform 0.25s ease;
+    }
+
+    .drop:hover,
+    .drop.dragover {
+      border-color: var(--accent);
+      background: linear-gradient(180deg, rgba(13, 107, 69, 0.08), rgba(255,255,255,0.4));
+      transform: translateY(-2px);
+    }
+
+    .drop input {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+    }
+
+    .drop-idle strong {
+      display: block;
+      font-size: 1.05rem;
+      margin-bottom: 0.35rem;
+    }
+
+    .drop-idle span {
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .preview {
+      display: none;
+      width: 100%;
+      gap: 1rem;
+      align-items: center;
+      text-align: left;
+    }
+
+    .preview.show {
+      display: grid;
+      grid-template-columns: minmax(140px, 220px) 1fr;
+    }
+
+    .preview img {
+      width: 100%;
+      max-height: 180px;
+      object-fit: contain;
+      border-radius: 10px;
+      background: #fff;
+      border: 1px solid var(--line);
+    }
+
+    .preview-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      min-width: 0;
+    }
+
+    .preview-meta strong {
+      font-size: 1rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .preview-meta span {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .actions {
+      margin-top: 1.1rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.65rem;
+    }
+
+    .btn {
+      border: 0;
+      border-radius: 999px;
+      font: 650 0.95rem var(--font-ui);
+      padding: 0.75rem 1.35rem;
+      cursor: pointer;
+      transition: transform 0.2s ease, background 0.2s ease, opacity 0.2s ease;
+    }
+
+    .btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+      box-shadow: 0 8px 22px var(--accent-glow);
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: var(--accent-deep);
+      transform: translateY(-1px);
+    }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--ink-soft);
+      border: 1px solid var(--line);
+    }
+
+    .btn-ghost:hover:not(:disabled) {
+      background: rgba(255,255,255,0.55);
+    }
+
+    .status {
+      margin-top: 0.9rem;
+      min-height: 1.3rem;
+      font-size: 0.92rem;
+      color: var(--muted);
+    }
+
+    .status.error { color: var(--danger); }
+    .status.busy { color: var(--accent-deep); }
+
+    .results {
+      margin-top: 1.35rem;
+      display: none;
+      animation: rise 0.55s ease both;
+    }
+
+    .results.show { display: block; }
+
+    .results-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .results-head h2 {
+      margin: 0;
+      font-family: var(--font-brand);
+      font-size: 1.45rem;
+      font-weight: 600;
+    }
+
+    .result-box {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 1.1rem 1.2rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: var(--font-bn);
+      font-size: 1.2rem;
+      line-height: 1.85;
+      color: var(--ink);
+      max-height: 420px;
+      overflow: auto;
+    }
+
+    .lines {
+      margin-top: 1rem;
+      display: grid;
+      gap: 0.55rem;
+    }
+
+    .line-item {
+      display: grid;
+      grid-template-columns: 2.2rem 1fr;
+      gap: 0.65rem;
+      align-items: start;
+      padding: 0.7rem 0.85rem;
+      background: rgba(255,255,255,0.65);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+
+    .line-item .n {
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: var(--accent);
+      padding-top: 0.25rem;
+    }
+
+    .line-item .t {
+      font-family: var(--font-bn);
+      font-size: 1.05rem;
+      line-height: 1.7;
+    }
+
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 640px) {
+      .wrap { width: min(100% - 1.25rem, 920px); padding-top: 1.5rem; }
+      .preview.show { grid-template-columns: 1fr; }
+      .panel { padding: 1rem; }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header class="brand">
+      <h1>BN-<span>HTR</span></h1>
+      <p>Upload a handwritten Bangla page or line image and get recognized text from the trained model.</p>
+    </header>
+
+    <section class="panel" aria-label="Upload and recognize">
+      <div class="base-url">
+        <label for="baseUrl">API base URL</label>
+        <div class="base-url-row">
+          <input
+            id="baseUrl"
+            type="url"
+            spellcheck="false"
+            autocomplete="off"
+            placeholder="http://127.0.0.1:5000"
+          />
+          <button class="btn btn-ghost" id="testBtn" type="button">Test</button>
+        </div>
+        <p class="hint">Leave empty for this same server, or paste a Hugging Face / remote API root (no trailing slash).</p>
+      </div>
+
+      <div class="modes" role="tablist" aria-label="Recognition mode">
+        <button type="button" class="active" data-mode="page" role="tab" aria-selected="true">Full page</button>
+        <button type="button" data-mode="line" role="tab" aria-selected="false">Single line</button>
+      </div>
+
+      <div class="drop" id="dropzone" tabindex="0" role="button" aria-label="Choose image file">
+        <input id="file" type="file" accept="image/*" />
+        <div class="drop-idle" id="dropIdle">
+          <strong>Drop an image here, or click to browse</strong>
+          <span>JPG, PNG, or similar · page scans work best for Full page mode</span>
+        </div>
+        <div class="preview" id="preview">
+          <img id="previewImg" alt="Selected image preview" />
+          <div class="preview-meta">
+            <strong id="fileName"></strong>
+            <span id="fileInfo"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn btn-primary" id="runBtn" disabled>Recognize</button>
+        <button class="btn btn-ghost" id="clearBtn" disabled>Clear</button>
+      </div>
+      <div class="status" id="status" aria-live="polite"></div>
+
+      <div class="results" id="results">
+        <div class="results-head">
+          <h2>Recognized text</h2>
+          <button class="btn btn-ghost" id="copyBtn" type="button">Copy</button>
+        </div>
+        <div class="result-box" id="fullText"></div>
+        <div class="lines" id="lineList"></div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // Change this when hosting the UI separately from the API
+    // (e.g. Hugging Face Space, Railway, your own server).
+    // Examples:
+    //   const DEFAULT_BASE_URL = "";  // same origin as this page
+    //   const DEFAULT_BASE_URL = "https://USERNAME-bn-htr.hf.space";
+    //   const DEFAULT_BASE_URL = "http://127.0.0.1:5000";
+    const DEFAULT_BASE_URL = "";
+    const BASE_URL_STORAGE_KEY = "bn-htr-api-base-url";
+
+    const state = {
+      mode: "page",
+      file: null,
+      lastText: "",
+    };
+
+    const dropzone = document.getElementById("dropzone");
+    const fileInput = document.getElementById("file");
+    const dropIdle = document.getElementById("dropIdle");
+    const preview = document.getElementById("preview");
+    const previewImg = document.getElementById("previewImg");
+    const fileName = document.getElementById("fileName");
+    const fileInfo = document.getElementById("fileInfo");
+    const runBtn = document.getElementById("runBtn");
+    const clearBtn = document.getElementById("clearBtn");
+    const copyBtn = document.getElementById("copyBtn");
+    const testBtn = document.getElementById("testBtn");
+    const baseUrlInput = document.getElementById("baseUrl");
+    const statusEl = document.getElementById("status");
+    const results = document.getElementById("results");
+    const fullText = document.getElementById("fullText");
+    const lineList = document.getElementById("lineList");
+
+    function normalizeBaseUrl(value) {
+      return (value || "").trim().replace(/\/+$/, "");
+    }
+
+    function getBaseUrl() {
+      return normalizeBaseUrl(baseUrlInput.value);
+    }
+
+    function apiUrl(path) {
+      const base = getBaseUrl();
+      const p = path.startsWith("/") ? path : `/${path}`;
+      return base ? `${base}${p}` : p;
+    }
+
+    function loadSavedBaseUrl() {
+      let saved = null;
+      try {
+        saved = localStorage.getItem(BASE_URL_STORAGE_KEY);
+      } catch (_) { /* ignore */ }
+      baseUrlInput.value = saved !== null ? saved : DEFAULT_BASE_URL;
+    }
+
+    function persistBaseUrl() {
+      try {
+        localStorage.setItem(BASE_URL_STORAGE_KEY, normalizeBaseUrl(baseUrlInput.value));
+      } catch (_) { /* ignore */ }
+    }
+
+    loadSavedBaseUrl();
+    baseUrlInput.addEventListener("change", persistBaseUrl);
+    baseUrlInput.addEventListener("blur", persistBaseUrl);
+
+    document.querySelectorAll(".modes button").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".modes button").forEach((b) => {
+          b.classList.remove("active");
+          b.setAttribute("aria-selected", "false");
+        });
+        btn.classList.add("active");
+        btn.setAttribute("aria-selected", "true");
+        state.mode = btn.dataset.mode;
+        setStatus("");
+      });
+    });
+
+    function setStatus(msg, kind = "") {
+      statusEl.textContent = msg;
+      statusEl.className = "status" + (kind ? " " + kind : "");
+    }
+
+    function setFile(file) {
+      if (!file || !file.type.startsWith("image/")) {
+        setStatus("Please choose an image file.", "error");
+        return;
+      }
+      state.file = file;
+      const url = URL.createObjectURL(file);
+      previewImg.onload = () => URL.revokeObjectURL(url);
+      previewImg.src = url;
+      fileName.textContent = file.name;
+      fileInfo.textContent = `${(file.size / 1024).toFixed(1)} KB`;
+      dropIdle.style.display = "none";
+      preview.classList.add("show");
+      runBtn.disabled = false;
+      clearBtn.disabled = false;
+      results.classList.remove("show");
+      setStatus("Ready to recognize.");
+    }
+
+    function clearAll() {
+      state.file = null;
+      state.lastText = "";
+      fileInput.value = "";
+      previewImg.removeAttribute("src");
+      preview.classList.remove("show");
+      dropIdle.style.display = "";
+      runBtn.disabled = true;
+      clearBtn.disabled = true;
+      results.classList.remove("show");
+      fullText.textContent = "";
+      lineList.innerHTML = "";
+      setStatus("");
+    }
+
+    fileInput.addEventListener("change", () => {
+      if (fileInput.files[0]) setFile(fileInput.files[0]);
+    });
+
+    ["dragenter", "dragover"].forEach((ev) => {
+      dropzone.addEventListener(ev, (e) => {
+        e.preventDefault();
+        dropzone.classList.add("dragover");
+      });
+    });
+    ["dragleave", "drop"].forEach((ev) => {
+      dropzone.addEventListener(ev, (e) => {
+        e.preventDefault();
+        dropzone.classList.remove("dragover");
+      });
+    });
+    dropzone.addEventListener("drop", (e) => {
+      const file = e.dataTransfer.files[0];
+      if (file) setFile(file);
+    });
+
+    clearBtn.addEventListener("click", clearAll);
+
+    testBtn.addEventListener("click", async () => {
+      persistBaseUrl();
+      setStatus("Checking API…", "busy");
+      try {
+        const res = await fetch(apiUrl("/health"));
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Health check failed");
+        setStatus(`Connected · device: ${data.device || "unknown"}`);
+      } catch (err) {
+        setStatus(
+          err.message || "Could not reach API. Check the base URL (and CORS if remote).",
+          "error"
+        );
+      }
+    });
+
+    copyBtn.addEventListener("click", async () => {
+      if (!state.lastText) return;
+      try {
+        await navigator.clipboard.writeText(state.lastText);
+        setStatus("Copied to clipboard.");
+      } catch {
+        setStatus("Could not copy automatically — select the text instead.", "error");
+      }
+    });
+
+    runBtn.addEventListener("click", async () => {
+      if (!state.file) return;
+
+      persistBaseUrl();
+      const endpoint = apiUrl(
+        state.mode === "page" ? "/recognize_page" : "/recognize_line"
+      );
+      const form = new FormData();
+      form.append("image", state.file);
+
+      runBtn.disabled = true;
+      clearBtn.disabled = true;
+      setStatus(
+        state.mode === "page"
+          ? "Segmenting lines and recognizing… this can take a moment."
+          : "Recognizing line…",
+        "busy"
+      );
+      results.classList.remove("show");
+
+      try {
+        const res = await fetch(endpoint, { method: "POST", body: form });
+        let data;
+        try {
+          data = await res.json();
+        } catch (_) {
+          throw new Error(`Bad response from ${endpoint} (${res.status})`);
+        }
+        if (!res.ok) {
+          throw new Error(data.error || "Recognition failed");
+        }
+
+        if (state.mode === "page") {
+          state.lastText = data.full_text || "";
+          fullText.textContent = state.lastText || "(no text detected)";
+          lineList.innerHTML = "";
+          const lines = data.lines || [];
+          const count = data.line_count != null ? data.line_count : lines.length;
+          lines.forEach((line, i) => {
+            const row = document.createElement("div");
+            row.className = "line-item";
+            row.innerHTML = `<div class="n">${i + 1}</div><div class="t"></div>`;
+            row.querySelector(".t").textContent = line || "—";
+            lineList.appendChild(row);
+          });
+          results.classList.add("show");
+          setStatus(`Done · automatically detected ${count} line${count === 1 ? "" : "s"}.`);
+        } else {
+          state.lastText = data.text || "";
+          fullText.textContent = state.lastText || "(no text detected)";
+          lineList.innerHTML = "";
+          results.classList.add("show");
+          setStatus("Done.");
+        }
+      } catch (err) {
+        setStatus(err.message || "Something went wrong.", "error");
+      } finally {
+        runBtn.disabled = !state.file;
+        clearBtn.disabled = !state.file;
+      }
+    });
+  </script>
+</body>
+</html>

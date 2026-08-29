@@ -1,0 +1,67 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# ===== Virtual environments =====
+venv/
+env/
+ENV/
+.venv/
+.env
+
+# ===== Jupyter =====
+.ipynb_checkpoints
+
+# ===== Dataset (never commit — too large, download separately) =====
+data/
+*.csv
+!requirements.txt
+
+# ===== Model checkpoints (large binary files) =====
+checkpoints/
+*.pt
+*.pth
+*.ckpt
+
+# ===== Vocabulary (regenerate via vocab.py rather than commit) =====
+vocab.json
+
+# ===== Segmentation / inference output =====
+segmented_lines/
+segmented_out/
+*.jpg
+*.jpeg
+*.png
+!docs/**/*.png
+!docs/**/*.jpg
+
+# ===== OS / editor junk =====
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+
+# ===== Logs =====
+*.log
+runs/
+logs/

@@ -1,0 +1,9 @@
+# Requirements for the Hugging Face Spaces deployment of gradio_app.py
+# In the Space repo, upload this file renamed to "requirements.txt"
+
+gradio
+torch
+opencv-python-headless
+numpy
+scikit-learn
+pillow
