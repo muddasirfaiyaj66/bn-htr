@@ -4,285 +4,144 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>BN-HTR — Bangla Handwriting Recognition</title>
-  <meta http-equiv="Cache-Control" content="no-store" />
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
   <!-- ui_version: {{ ui_version }} -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Figtree:wght@400;500;600;700&family=Noto+Sans+Bengali:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@400;500;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
     :root {
-      --ink: #12241c;
-      --ink-soft: #2a4036;
-      --muted: #5c7268;
-      --paper: #e8efe9;
-      --surface: rgba(255, 255, 255, 0.72);
-      --accent: #0d6b45;
-      --accent-deep: #084f33;
-      --accent-glow: rgba(13, 107, 69, 0.18);
-      --danger: #a33a2f;
-      --line: rgba(18, 36, 28, 0.12);
-      --shadow: 0 18px 50px rgba(18, 36, 28, 0.12);
-      --radius: 18px;
-      --font-brand: "Fraunces", Georgia, serif;
-      --font-ui: "Figtree", system-ui, sans-serif;
-      --font-bn: "Noto Sans Bengali", "Figtree", sans-serif;
+      --ink: #121a16;
+      --muted: #5e6e66;
+      --panel: #ffffff;
+      --canvas: #e9efeb;
+      --accent: #0a6448;
+      --accent-deep: #074833;
+      --accent-soft: rgba(10, 100, 72, 0.09);
+      --danger: #b42318;
+      --rule: rgba(18, 26, 22, 0.1);
+      --font-brand: "Instrument Serif", Georgia, serif;
+      --font-ui: "Manrope", system-ui, sans-serif;
+      --font-bn: "Noto Sans Bengali", "Manrope", sans-serif;
     }
 
     * { box-sizing: border-box; }
 
-    html, body {
-      margin: 0;
-      min-height: 100%;
+    html, body { margin: 0; height: 100%; }
+
+    body {
       color: var(--ink);
       font-family: var(--font-ui);
-      background:
-        radial-gradient(1200px 700px at 12% -10%, #c5dfd0 0%, transparent 55%),
-        radial-gradient(900px 600px at 100% 0%, #d7e4dc 0%, transparent 50%),
-        linear-gradient(165deg, #dfeae3 0%, #cfdcd4 45%, #b9cbc0 100%);
-      background-attachment: fixed;
+      background: var(--canvas);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
     }
 
-    body::before {
-      content: "";
-      position: fixed;
-      inset: 0;
-      pointer-events: none;
-      opacity: 0.35;
-      background-image:
-        repeating-linear-gradient(
-          0deg,
-          transparent,
-          transparent 2px,
-          rgba(18, 36, 28, 0.015) 2px,
-          rgba(18, 36, 28, 0.015) 3px
-        );
+    .app {
+      flex: 1;
+      display: grid;
+      grid-template-rows: auto auto 1fr auto;
+      min-height: 100vh;
+      width: 100%;
+      margin: 0;
     }
 
-    .wrap {
-      position: relative;
-      width: min(920px, calc(100% - 2rem));
-      margin: 0 auto;
-      padding: 2.5rem 0 4rem;
+    .top {
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) auto;
+      align-items: center;
+      gap: 1.5rem 2rem;
+      padding: 1.1rem 1.75rem;
+      background: var(--panel);
+      border-bottom: 1px solid var(--rule);
     }
 
     .brand {
-      animation: rise 0.7s ease both;
+      display: flex;
+      flex-direction: column;
+      gap: 0.28rem;
+      min-width: 0;
     }
 
     .brand h1 {
       margin: 0;
       font-family: var(--font-brand);
-      font-size: clamp(2.4rem, 6vw, 3.6rem);
-      font-weight: 700;
-      letter-spacing: -0.03em;
-      line-height: 1.05;
-      color: var(--ink);
+      font-size: 2rem;
+      font-weight: 400;
+      letter-spacing: -0.025em;
+      line-height: 1;
     }
 
-    .brand h1 span {
+    .brand h1 em {
+      font-style: italic;
       color: var(--accent);
     }
 
-    .brand p {
-      margin: 0.75rem 0 0;
-      max-width: 34rem;
+    .brand span {
       color: var(--muted);
-      font-size: 1.05rem;
-      line-height: 1.5;
+      font-size: 0.88rem;
+      line-height: 1.3;
     }
 
-    .panel {
-      margin-top: 2rem;
-      padding: 1.35rem;
-      background: var(--surface);
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      backdrop-filter: blur(14px);
-      box-shadow: var(--shadow);
-      animation: rise 0.8s ease 0.08s both;
-    }
-
-    .base-url {
-      display: grid;
-      gap: 0.4rem;
-      margin-bottom: 1.1rem;
-    }
-
-    .base-url label {
-      font-size: 0.82rem;
-      font-weight: 650;
-      color: var(--ink-soft);
-      letter-spacing: 0.02em;
-    }
-
-    .base-url-row {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 0.5rem;
-    }
-
-    .base-url input {
-      width: 100%;
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      padding: 0.7rem 0.9rem;
-      font: 500 0.92rem var(--font-ui);
-      color: var(--ink);
-      background: rgba(255, 255, 255, 0.85);
-      outline: none;
-      transition: border-color 0.2s ease, box-shadow 0.2s ease;
-    }
-
-    .base-url input:focus {
-      border-color: var(--accent);
-      box-shadow: 0 0 0 3px var(--accent-glow);
-    }
-
-    .base-url .hint {
-      margin: 0;
-      font-size: 0.8rem;
-      color: var(--muted);
-      line-height: 1.4;
-    }
-
-    .modes {
+    .top-actions {
       display: flex;
-      gap: 0.4rem;
-      padding: 0.3rem;
-      width: fit-content;
-      background: rgba(18, 36, 28, 0.06);
-      border-radius: 999px;
-    }
-
-    .modes button {
-      border: 0;
-      background: transparent;
-      color: var(--ink-soft);
-      font: 600 0.92rem var(--font-ui);
-      padding: 0.55rem 1rem;
-      border-radius: 999px;
-      cursor: pointer;
-      transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
-    }
-
-    .modes button.active {
-      background: #fff;
-      color: var(--accent-deep);
-      box-shadow: 0 4px 14px rgba(18, 36, 28, 0.1);
-    }
-
-    .modes button:hover:not(.active) {
-      color: var(--ink);
-    }
-
-    .drop {
-      margin-top: 1.15rem;
-      position: relative;
-      border: 1.5px dashed rgba(13, 107, 69, 0.35);
-      border-radius: 14px;
-      background:
-        linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0.25));
-      min-height: 220px;
-      display: grid;
-      place-items: center;
-      text-align: center;
-      padding: 1.5rem;
-      cursor: pointer;
-      transition: border-color 0.2s ease, background 0.2s ease, transform 0.25s ease;
-    }
-
-    .drop:hover,
-    .drop.dragover {
-      border-color: var(--accent);
-      background: linear-gradient(180deg, rgba(13, 107, 69, 0.08), rgba(255,255,255,0.4));
-      transform: translateY(-2px);
-    }
-
-    .drop input {
-      position: absolute;
-      inset: 0;
-      opacity: 0;
-      cursor: pointer;
-    }
-
-    .drop-idle strong {
-      display: block;
-      font-size: 1.05rem;
-      margin-bottom: 0.35rem;
-    }
-
-    .drop-idle span {
-      color: var(--muted);
-      font-size: 0.92rem;
-    }
-
-    .preview {
-      display: none;
-      width: 100%;
-      gap: 1rem;
       align-items: center;
-      text-align: left;
-    }
-
-    .preview.show {
-      display: grid;
-      grid-template-columns: minmax(140px, 220px) 1fr;
-    }
-
-    .preview img {
-      width: 100%;
-      max-height: 180px;
-      object-fit: contain;
-      border-radius: 10px;
-      background: #fff;
-      border: 1px solid var(--line);
-    }
-
-    .preview-meta {
-      display: flex;
-      flex-direction: column;
-      gap: 0.35rem;
-      min-width: 0;
-    }
-
-    .preview-meta strong {
-      font-size: 1rem;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .preview-meta span {
-      color: var(--muted);
-      font-size: 0.9rem;
-    }
-
-    .actions {
-      margin-top: 1.1rem;
-      display: flex;
+      gap: 1rem;
       flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .api-wrap {
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+      padding: 0.35rem;
+      background: #f4f8f6;
+      border: 1px solid var(--rule);
+      border-radius: 12px;
+    }
+
+    .api-wrap input {
+      width: min(280px, 36vw);
+      border: 0;
+      border-radius: 8px;
+      padding: 0.62rem 0.85rem;
+      font: 500 0.86rem var(--font-ui);
+      background: transparent;
+      color: var(--ink);
+      outline: none;
+      min-width: 160px;
+    }
+
+    .api-wrap input:focus {
+      background: #fff;
+    }
+
+    .action-group {
+      display: flex;
+      align-items: center;
       gap: 0.65rem;
     }
 
     .btn {
       border: 0;
-      border-radius: 999px;
-      font: 650 0.95rem var(--font-ui);
-      padding: 0.75rem 1.35rem;
+      border-radius: 10px;
+      font: 650 0.88rem var(--font-ui);
+      padding: 0.68rem 1.15rem;
       cursor: pointer;
-      transition: transform 0.2s ease, background 0.2s ease, opacity 0.2s ease;
+      transition: background 0.15s ease, opacity 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+      white-space: nowrap;
     }
 
-    .btn:disabled {
-      opacity: 0.45;
-      cursor: not-allowed;
-      transform: none;
-    }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
 
     .btn-primary {
       background: var(--accent);
       color: #fff;
-      box-shadow: 0 8px 22px var(--accent-glow);
+      box-shadow: 0 6px 16px rgba(10, 100, 72, 0.22);
     }
 
     .btn-primary:hover:not(:disabled) {
@@ -291,206 +150,338 @@
     }
 
     .btn-ghost {
-      background: transparent;
-      color: var(--ink-soft);
-      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+      border: 1px solid var(--rule);
     }
 
     .btn-ghost:hover:not(:disabled) {
-      background: rgba(255,255,255,0.55);
+      background: #f3f7f4;
+      border-color: rgba(10, 100, 72, 0.28);
+    }
+
+    .api-wrap .btn-ghost {
+      background: #fff;
+      padding: 0.55rem 0.9rem;
     }
 
     .status {
-      margin-top: 0.9rem;
-      min-height: 1.3rem;
-      font-size: 0.92rem;
+      width: 100%;
+      padding: 0.55rem 1.75rem;
+      font-size: 0.84rem;
       color: var(--muted);
+      background: #f7faf8;
+      border-bottom: 1px solid var(--rule);
     }
 
-    .status.error { color: var(--danger); }
-    .status.busy { color: var(--accent-deep); }
+    .status:empty { display: none; padding: 0; border: 0; }
+    .status.error { color: var(--danger); background: #fdf6f5; }
+    .status.busy { color: var(--accent-deep); font-weight: 600; }
 
-    .results {
-      margin-top: 1.35rem;
-      display: none;
-      animation: rise 0.55s ease both;
+    .compare {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      min-height: 0;
+      height: 100%;
     }
 
-    .results.show { display: block; }
+    .col {
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      background: var(--panel);
+    }
 
-    .results-head {
+    .col + .col {
+      border-left: 1px solid var(--rule);
+    }
+
+    .col-label {
+      flex: 0 0 auto;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 1rem;
-      margin-bottom: 0.75rem;
+      gap: 0.75rem;
+      padding: 0.8rem 1.35rem;
+      border-bottom: 1px solid var(--rule);
+      background: #f7faf8;
     }
 
-    .results-head h2 {
-      margin: 0;
-      font-family: var(--font-brand);
-      font-size: 1.45rem;
-      font-weight: 600;
+    .col-label strong {
+      font-size: 0.72rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 700;
     }
 
-    .result-box {
-      background: #fff;
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      padding: 1.1rem 1.2rem;
-      white-space: pre-wrap;
-      word-break: break-word;
-      font-family: var(--font-bn);
-      font-size: 1.2rem;
-      line-height: 1.85;
-      color: var(--ink);
-      max-height: 420px;
+    .col-label em {
+      font-style: normal;
+      font-size: 0.8rem;
+      color: var(--muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 60%;
+    }
+
+    .col-body {
+      flex: 1;
+      min-height: 0;
       overflow: auto;
+      position: relative;
     }
 
-    .lines {
-      margin-top: 1rem;
+    /* Source */
+    .drop {
+      min-height: 100%;
       display: grid;
-      gap: 0.55rem;
+      place-items: center;
+      padding: 1rem;
+      cursor: pointer;
+      background: #f4f7f5;
     }
 
-    .line-item {
+    .drop.dragover { background: var(--accent-soft); }
+
+    .drop input {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+    }
+
+    .drop-idle {
+      text-align: center;
+      pointer-events: none;
+      color: var(--muted);
+      max-width: 15rem;
+    }
+
+    .drop-idle strong {
+      display: block;
+      color: var(--ink);
+      font-size: 1rem;
+      margin-bottom: 0.35rem;
+    }
+
+    .drop-idle span { font-size: 0.88rem; line-height: 1.4; }
+
+    .preview {
+      display: none;
+      width: 100%;
+      min-height: 100%;
+      padding: 1.25rem;
+      align-items: flex-start;
+      justify-content: center;
+      background: #f4f7f5;
+    }
+
+    .preview.show { display: flex; }
+
+    .preview img {
+      width: 100%;
+      height: auto;
+      max-width: 100%;
+      object-fit: contain;
+      border-radius: 4px;
+      box-shadow: 0 10px 30px rgba(18, 26, 22, 0.12);
+      background: #fff;
+    }
+
+    /* Transcript — reading-first */
+    .reader-empty {
+      height: 100%;
       display: grid;
-      grid-template-columns: 2.2rem 1fr;
-      gap: 0.65rem;
-      align-items: start;
-      padding: 0.7rem 0.85rem;
-      background: rgba(255,255,255,0.65);
-      border: 1px solid var(--line);
-      border-radius: 12px;
+      place-items: center;
+      padding: 2rem;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.95rem;
+      line-height: 1.5;
     }
 
-    .line-item .n {
-      font-size: 0.78rem;
+    .reader-empty.hidden { display: none; }
+
+    .transcript {
+      display: none;
+      padding: 1.5rem 1.75rem 2.5rem;
+      max-width: 42rem;
+      margin: 0 auto;
+    }
+
+    .transcript.show { display: block; }
+
+    .t-line {
+      display: grid;
+      grid-template-columns: 2.25rem 1fr;
+      gap: 0.85rem;
+      align-items: baseline;
+      padding: 0.7rem 0;
+      border-bottom: 1px solid rgba(18, 26, 22, 0.06);
+    }
+
+    .t-line:last-child { border-bottom: 0; }
+
+    .t-line .n {
+      font-size: 0.75rem;
       font-weight: 700;
       color: var(--accent);
-      padding-top: 0.25rem;
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+      padding-top: 0.35rem;
+      user-select: none;
     }
 
-    .line-item .t {
+    .t-line .t {
       font-family: var(--font-bn);
-      font-size: 1.05rem;
-      line-height: 1.7;
+      font-size: clamp(1.2rem, 1.6vw, 1.45rem);
+      font-weight: 500;
+      line-height: 2.05;
+      color: var(--ink);
+      letter-spacing: 0.01em;
     }
 
-    @keyframes rise {
-      from { opacity: 0; transform: translateY(12px); }
-      to { opacity: 1; transform: translateY(0); }
+    .site-footer {
+      padding: 0.9rem 1.75rem;
+      text-align: center;
+      background: var(--panel);
+      border-top: 1px solid var(--rule);
+      font-size: 0.86rem;
+      color: var(--muted);
     }
 
-    @media (max-width: 640px) {
-      .wrap { width: min(100% - 1.25rem, 920px); padding-top: 1.5rem; }
-      .preview.show { grid-template-columns: 1fr; }
-      .panel { padding: 1rem; }
+    .site-footer a {
+      color: var(--accent-deep);
+      font-weight: 650;
+      text-decoration: none;
+    }
+
+    .site-footer a:hover { text-decoration: underline; }
+
+    @media (max-width: 900px) {
+      .top {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+        padding: 1rem 1.15rem;
+      }
+      .top-actions {
+        justify-content: stretch;
+        width: 100%;
+      }
+      .api-wrap {
+        flex: 1;
+        width: 100%;
+      }
+      .api-wrap input {
+        width: 100%;
+        min-width: 0;
+      }
+      .action-group {
+        width: 100%;
+        justify-content: stretch;
+      }
+      .action-group .btn {
+        flex: 1;
+        text-align: center;
+      }
+      .compare {
+        grid-template-columns: 1fr;
+        grid-template-rows: minmax(280px, 42vh) 1fr;
+      }
+      .col + .col { border-left: 0; border-top: 1px solid var(--rule); }
     }
   </style>
 </head>
 <body>
-  <main class="wrap">
-    <header class="brand">
-      <h1>BN-<span>HTR</span></h1>
-      <p>Upload a handwritten Bangla page or line image and get recognized text from the trained model.</p>
-    </header>
-
-    <section class="panel" aria-label="Upload and recognize">
-      <div class="base-url">
-        <label for="baseUrl">API base URL</label>
-        <div class="base-url-row">
-          <input
-            id="baseUrl"
-            type="url"
-            spellcheck="false"
-            autocomplete="off"
-            placeholder="http://127.0.0.1:5000"
-          />
+  <div class="app">
+    <header class="top">
+      <div class="brand">
+        <h1>BN-<em>HTR</em></h1>
+        <span>Bangla handwriting recognition</span>
+      </div>
+      <div class="top-actions">
+        <div class="api-wrap">
+          <input id="baseUrl" type="url" spellcheck="false" autocomplete="off" placeholder="API URL (optional)" aria-label="API base URL" />
           <button class="btn btn-ghost" id="testBtn" type="button">Test</button>
         </div>
-        <p class="hint">Local: leave empty. Hugging Face Gradio Space: paste <code>https://YOUR-SPACE.hf.space</code> (no trailing slash).</p>
-      </div>
-
-      <div class="modes" role="tablist" aria-label="Recognition mode">
-        <button type="button" class="active" data-mode="page" role="tab" aria-selected="true">Full page</button>
-        <button type="button" data-mode="line" role="tab" aria-selected="false">Single line</button>
-      </div>
-
-      <div class="drop" id="dropzone" tabindex="0" role="button" aria-label="Choose image file">
-        <input id="file" type="file" accept="image/*" />
-        <div class="drop-idle" id="dropIdle">
-          <strong>Drop an image here, or click to browse</strong>
-          <span>JPG, PNG, or similar · page scans work best for Full page mode</span>
+        <div class="action-group">
+          <button class="btn btn-primary" id="runBtn" disabled>Recognize</button>
+          <button class="btn btn-ghost" id="copyBtn" type="button" disabled>Copy</button>
+          <button class="btn btn-ghost" id="clearBtn" disabled>Clear</button>
         </div>
-        <div class="preview" id="preview">
-          <img id="previewImg" alt="Selected image preview" />
-          <div class="preview-meta">
-            <strong id="fileName"></strong>
-            <span id="fileInfo"></span>
+      </div>
+    </header>
+    <div class="status" id="status" aria-live="polite"></div>
+
+    <section class="compare" aria-label="Compare source and transcript">
+      <div class="col">
+        <div class="col-label">
+          <strong>Handwriting</strong>
+          <em id="fileMeta">Drop or choose an image</em>
+        </div>
+        <div class="col-body" id="sourceBody">
+          <div class="drop" id="dropzone" tabindex="0" role="button" aria-label="Choose image">
+            <input id="file" type="file" accept="image/*" />
+            <div class="drop-idle" id="dropIdle">
+              <strong>Drop page or line image</strong>
+              <span>JPG / PNG — then press Recognize</span>
+            </div>
+            <div class="preview" id="preview">
+              <img id="previewImg" alt="Handwritten source" />
+            </div>
           </div>
         </div>
       </div>
 
-      <div class="actions">
-        <button class="btn btn-primary" id="runBtn" disabled>Recognize</button>
-        <button class="btn btn-ghost" id="clearBtn" disabled>Clear</button>
-      </div>
-      <div class="status" id="status" aria-live="polite"></div>
-
-      <div class="results" id="results">
-        <div class="results-head">
-          <h2>Recognized text</h2>
-          <button class="btn btn-ghost" id="copyBtn" type="button">Copy</button>
+      <div class="col">
+        <div class="col-label">
+          <strong>Transcript</strong>
+          <em id="resultMeta">Waiting for recognition</em>
         </div>
-        <div class="result-box" id="fullText"></div>
-        <div class="lines" id="lineList"></div>
+        <div class="col-body" id="readerBody">
+          <div class="reader-empty" id="outputEmpty">
+            Recognized text appears here as a readable line-by-line transcript.
+          </div>
+          <div class="transcript" id="transcript"></div>
+        </div>
       </div>
     </section>
-  </main>
+
+    <footer class="site-footer">
+      Developed by
+      <a href="https://muddasirfaiyaj.dev/" target="_blank" rel="noopener noreferrer">Muddasir Faiyaj</a>
+    </footer>
+  </div>
 
   <script>
-    // Empty = talk to this same page's server (local `python app.py`).
-    // For a remote Hugging Face Gradio Space, paste e.g.:
-    //   https://muddasir-faiyaj-bn-htr.hf.space
     const DEFAULT_BASE_URL = "";
     const BASE_URL_STORAGE_KEY = "bn-htr-api-base-url-v2";
 
-    const state = {
-      mode: "page",
-      file: null,
-      lastText: "",
-      apiKind: null, // "flask" | "gradio"
-    };
+    const state = { file: null, lastText: "", apiKind: null };
 
     const dropzone = document.getElementById("dropzone");
     const fileInput = document.getElementById("file");
     const dropIdle = document.getElementById("dropIdle");
     const preview = document.getElementById("preview");
     const previewImg = document.getElementById("previewImg");
-    const fileName = document.getElementById("fileName");
-    const fileInfo = document.getElementById("fileInfo");
+    const fileMeta = document.getElementById("fileMeta");
+    const resultMeta = document.getElementById("resultMeta");
     const runBtn = document.getElementById("runBtn");
     const clearBtn = document.getElementById("clearBtn");
     const copyBtn = document.getElementById("copyBtn");
     const testBtn = document.getElementById("testBtn");
     const baseUrlInput = document.getElementById("baseUrl");
     const statusEl = document.getElementById("status");
-    const results = document.getElementById("results");
-    const fullText = document.getElementById("fullText");
-    const lineList = document.getElementById("lineList");
+    const outputEmpty = document.getElementById("outputEmpty");
+    const transcript = document.getElementById("transcript");
 
     function normalizeBaseUrl(value) {
       let v = (value || "").trim().replace(/\/+$/, "");
       if (!v) return "";
-      // Common typos
       v = v.replace(/^ttps:\/\//i, "https://");
       v = v.replace(/^ttp:\/\//i, "http://");
-      // Bare host / hf.space without scheme
-      if (!/^https?:\/\//i.test(v)) {
-        v = `https://${v}`;
-      }
+      if (!/^https?:\/\//i.test(v)) v = `https://${v}`;
       return v.replace(/\/+$/, "");
     }
 
@@ -505,9 +496,7 @@
     }
 
     function looksLikeHfSpace(base) {
-      if (!base) {
-        return /\.hf\.space$/i.test(location.hostname);
-      }
+      if (!base) return /\.hf\.space$/i.test(location.hostname);
       try {
         const host = new URL(base).hostname;
         return /\.hf\.space$/i.test(host) || /huggingface\.co$/i.test(host);
@@ -518,47 +507,47 @@
 
     function loadSavedBaseUrl() {
       let saved = null;
-      try {
-        saved = localStorage.getItem(BASE_URL_STORAGE_KEY);
-      } catch (_) { /* ignore */ }
+      try { saved = localStorage.getItem(BASE_URL_STORAGE_KEY); } catch (_) {}
       baseUrlInput.value = normalizeBaseUrl(saved !== null ? saved : DEFAULT_BASE_URL);
-      baseUrlInput.placeholder = "https://your-space.hf.space  (or leave empty for local)";
     }
 
     function persistBaseUrl() {
       const v = normalizeBaseUrl(baseUrlInput.value);
       baseUrlInput.value = v;
-      try {
-        localStorage.setItem(BASE_URL_STORAGE_KEY, v);
-      } catch (_) { /* ignore */ }
+      try { localStorage.setItem(BASE_URL_STORAGE_KEY, v); } catch (_) {}
     }
 
     loadSavedBaseUrl();
-    baseUrlInput.addEventListener("change", () => {
-      state.apiKind = null;
-      persistBaseUrl();
-    });
-    baseUrlInput.addEventListener("blur", () => {
-      state.apiKind = null;
-      persistBaseUrl();
-    });
-
-    document.querySelectorAll(".modes button").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        document.querySelectorAll(".modes button").forEach((b) => {
-          b.classList.remove("active");
-          b.setAttribute("aria-selected", "false");
-        });
-        btn.classList.add("active");
-        btn.setAttribute("aria-selected", "true");
-        state.mode = btn.dataset.mode;
-        setStatus("");
-      });
-    });
+    baseUrlInput.addEventListener("change", () => { state.apiKind = null; persistBaseUrl(); });
+    baseUrlInput.addEventListener("blur", () => { state.apiKind = null; persistBaseUrl(); });
 
     function setStatus(msg, kind = "") {
-      statusEl.textContent = msg;
+      statusEl.textContent = msg || "";
       statusEl.className = "status" + (kind ? " " + kind : "");
+    }
+
+    function resetTranscript() {
+      transcript.innerHTML = "";
+      transcript.classList.remove("show");
+      outputEmpty.classList.remove("hidden");
+      resultMeta.textContent = "Waiting for recognition";
+      copyBtn.disabled = true;
+      state.lastText = "";
+    }
+
+    function renderTranscript(lines, meta) {
+      transcript.innerHTML = "";
+      lines.forEach((line, i) => {
+        const row = document.createElement("div");
+        row.className = "t-line";
+        row.innerHTML = `<div class="n">${i + 1}</div><div class="t"></div>`;
+        row.querySelector(".t").textContent = line || "—";
+        transcript.appendChild(row);
+      });
+      outputEmpty.classList.add("hidden");
+      transcript.classList.add("show");
+      resultMeta.textContent = meta;
+      copyBtn.disabled = !state.lastText;
     }
 
     function setFile(file) {
@@ -570,28 +559,25 @@
       const url = URL.createObjectURL(file);
       previewImg.onload = () => URL.revokeObjectURL(url);
       previewImg.src = url;
-      fileName.textContent = file.name;
-      fileInfo.textContent = `${(file.size / 1024).toFixed(1)} KB`;
+      fileMeta.textContent = `${file.name} · ${(file.size / 1024).toFixed(1)} KB`;
       dropIdle.style.display = "none";
       preview.classList.add("show");
       runBtn.disabled = false;
       clearBtn.disabled = false;
-      results.classList.remove("show");
+      resetTranscript();
       setStatus("Ready to recognize.");
     }
 
     function clearAll() {
       state.file = null;
-      state.lastText = "";
       fileInput.value = "";
       previewImg.removeAttribute("src");
       preview.classList.remove("show");
       dropIdle.style.display = "";
+      fileMeta.textContent = "Drop or choose an image";
       runBtn.disabled = true;
       clearBtn.disabled = true;
-      results.classList.remove("show");
-      fullText.textContent = "";
-      lineList.innerHTML = "";
+      resetTranscript();
       setStatus("");
     }
 
@@ -622,24 +608,16 @@
       const text = await res.text();
       const ctype = (res.headers.get("content-type") || "").toLowerCase();
       if (!ctype.includes("application/json") && text.trimStart().startsWith("<")) {
-        throw new Error(
-          `${label} returned a web page, not JSON. ` +
-            `For Hugging Face Gradio Spaces use the Space root URL ` +
-            `(https://….hf.space). For local Flask leave the box empty.`
-        );
+        throw new Error(`${label} returned HTML, not JSON. Check the API URL.`);
       }
       let data;
       try {
         data = text ? JSON.parse(text) : null;
       } catch (_) {
-        throw new Error(
-          `${label} returned non-JSON (${res.status}). Check the API base URL.`
-        );
+        throw new Error(`${label} returned non-JSON (${res.status}).`);
       }
       if (!res.ok) {
-        const msg =
-          (data && (data.error || data.detail)) ||
-          `${label} failed (${res.status})`;
+        const msg = (data && (data.error || data.detail)) || `${label} failed (${res.status})`;
         throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
       }
       return data;
@@ -648,31 +626,22 @@
     async function tryFlask() {
       const healthRes = await fetch(apiUrl("/health"));
       const ctype = (healthRes.headers.get("content-type") || "").toLowerCase();
-      if (!healthRes.ok || !ctype.includes("application/json")) {
-        return null;
-      }
+      if (!healthRes.ok || !ctype.includes("application/json")) return null;
       return "flask";
     }
 
     async function tryGradio() {
       const infoRes = await fetch(apiUrl("/gradio_api/info"));
       const ctype = (infoRes.headers.get("content-type") || "").toLowerCase();
-      if (!infoRes.ok || !ctype.includes("application/json")) {
-        return null;
-      }
+      if (!infoRes.ok || !ctype.includes("application/json")) return null;
       return "gradio";
     }
 
-    /** Detect Flask REST vs Gradio Space. HF Spaces are Gradio — check those first. */
     async function detectApiKind(force = false) {
       if (!force && state.apiKind) return state.apiKind;
-      const base = getBaseUrl();
-      const preferGradio = looksLikeHfSpace(base);
-
-      const order = preferGradio
+      const order = looksLikeHfSpace(getBaseUrl())
         ? [tryGradio, tryFlask]
         : [tryFlask, tryGradio];
-
       for (const probe of order) {
         try {
           const kind = await probe();
@@ -680,23 +649,16 @@
             state.apiKind = kind;
             return kind;
           }
-        } catch (_) { /* try next */ }
+        } catch (_) {}
       }
-
       state.apiKind = null;
-      throw new Error(
-        "Could not reach BN-HTR. Local: leave API URL empty and run `python app.py`. " +
-          "Hugging Face: paste https://YOUR-SPACE.hf.space (Gradio Space)."
-      );
+      throw new Error("Could not reach BN-HTR. Leave API URL empty for local, or paste your HF Space URL.");
     }
 
     async function uploadToGradio(file) {
       const form = new FormData();
       form.append("files", file, file.name || "image.jpg");
-      const res = await fetch(apiUrl("/gradio_api/upload"), {
-        method: "POST",
-        body: form,
-      });
+      const res = await fetch(apiUrl("/gradio_api/upload"), { method: "POST", body: form });
       const paths = await readJsonOrThrow(res, "Gradio upload");
       const path = Array.isArray(paths) ? paths[0] : paths;
       if (!path) throw new Error("Gradio upload returned no file path");
@@ -720,9 +682,7 @@
       if (!eventId) throw new Error("Gradio call did not return event_id");
 
       const pollRes = await fetch(apiUrl(`/gradio_api/call/${endpoint}/${eventId}`));
-      if (!pollRes.ok) {
-        throw new Error(`Gradio poll failed (${pollRes.status})`);
-      }
+      if (!pollRes.ok) throw new Error(`Gradio poll failed (${pollRes.status})`);
       const body = await pollRes.text();
       const blocks = body.split(/\n\n+/);
       let payload = null;
@@ -736,55 +696,38 @@
           if (line.startsWith("data:")) dataLine += line.slice(5).trim();
         }
         if (event === "error") {
-          try {
-            sawError = JSON.parse(dataLine);
-          } catch (_) {
-            sawError = dataLine || "Gradio error";
-          }
+          try { sawError = JSON.parse(dataLine); }
+          catch (_) { sawError = dataLine || "Gradio error"; }
         }
-        if (event === "complete" && dataLine) {
-          payload = JSON.parse(dataLine);
-        }
+        if (event === "complete" && dataLine) payload = JSON.parse(dataLine);
       }
       if (sawError) {
-        const msg =
-          typeof sawError === "string"
-            ? sawError
-            : sawError.error || sawError.message || JSON.stringify(sawError);
+        const msg = typeof sawError === "string"
+          ? sawError
+          : sawError.error || sawError.message || JSON.stringify(sawError);
         throw new Error(msg);
       }
-      if (payload == null) {
-        throw new Error(
-          "Gradio did not return a result (Space may be sleeping — open the Space once, wait for it to wake, then retry)."
-        );
-      }
+      if (payload == null) throw new Error("Gradio did not return a result. Wake the Space and retry.");
       const text = Array.isArray(payload) ? payload[0] : payload;
       return typeof text === "string" ? text : String(text ?? "");
     }
 
     async function recognizeViaGradio() {
       const uploaded = await uploadToGradio(state.file);
-      const endpoint = state.mode === "page" ? "recognize_page" : "recognize_line";
-      const text = await callGradio(endpoint, uploaded);
-      if (state.mode === "page") {
-        const lines = text.split("\n");
-        return {
-          lines,
-          full_text: text,
-          line_count: lines.filter((l) => l.length).length || lines.length,
-        };
-      }
-      return { text };
+      const text = await callGradio("recognize", uploaded);
+      const lines = String(text || "").split("\n");
+      return {
+        lines,
+        full_text: text,
+        line_count: lines.filter((l) => l.length).length || lines.length,
+      };
     }
 
     async function recognizeViaFlask() {
-      const endpoint = apiUrl(
-        state.mode === "page" ? "/recognize_page" : "/recognize_line"
-      );
       const form = new FormData();
       form.append("image", state.file);
-      const res = await fetch(endpoint, { method: "POST", body: form });
-      return readJsonOrThrow(res, endpoint);
+      const res = await fetch(apiUrl("/recognize"), { method: "POST", body: form });
+      return readJsonOrThrow(res, "Recognize");
     }
 
     testBtn.addEventListener("click", async () => {
@@ -794,79 +737,87 @@
       try {
         const kind = await detectApiKind(true);
         if (kind === "flask") {
-          const res = await fetch(apiUrl("/health"));
-          const data = await readJsonOrThrow(res, "Health check");
-          setStatus(`Connected (Flask) · device: ${data.device || "unknown"}`);
+          const data = await readJsonOrThrow(await fetch(apiUrl("/health")), "Health");
+          setStatus(`Connected · Flask · ${data.device || "unknown"}`);
         } else {
-          const res = await fetch(apiUrl("/gradio_api/info"));
-          const data = await readJsonOrThrow(res, "Gradio info");
-          const endpoints =
-            Object.keys(data.named_endpoints || {}).join(", ") || "ok";
-          setStatus(`Connected (Gradio Space) · ${endpoints}`);
+          const data = await readJsonOrThrow(await fetch(apiUrl("/gradio_api/info")), "Gradio");
+          const endpoints = Object.keys(data.named_endpoints || {}).join(", ") || "ok";
+          setStatus(`Connected · Gradio · ${endpoints}`);
         }
       } catch (err) {
-        setStatus(
-          err.message || "Could not reach API. Check the base URL.",
-          "error"
-        );
+        setStatus(err.message || "Could not reach API.", "error");
       }
     });
 
+    function copyTextFallback(text) {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.readOnly = false;
+      // Must be in-document and selectable; tiny/hidden nodes often fail on HTTP
+      ta.style.cssText =
+        "position:fixed;top:50%;left:50%;width:240px;height:80px;" +
+        "opacity:0.01;z-index:99999;border:none;padding:0;margin:0;";
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      ta.setSelectionRange(0, ta.value.length);
+      let ok = false;
+      try {
+        ok = document.execCommand("copy");
+      } catch (_) {
+        ok = false;
+      }
+      document.body.removeChild(ta);
+      return ok;
+    }
+
+    async function copyText(text) {
+      // Prefer Clipboard API when available (works on localhost / HTTPS)
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+        try {
+          await navigator.clipboard.writeText(text);
+          return true;
+        } catch (_) { /* LAN HTTP often blocks this — use fallback */ }
+      }
+      return copyTextFallback(text);
+    }
+
     copyBtn.addEventListener("click", async () => {
       if (!state.lastText) return;
-      try {
-        await navigator.clipboard.writeText(state.lastText);
-        setStatus("Copied to clipboard.");
-      } catch {
-        setStatus("Could not copy automatically — select the text instead.", "error");
+      const ok = await copyText(state.lastText);
+      if (ok) {
+        setStatus("Copied transcript.");
+      } else {
+        // Last resort: select transcript so user can Ctrl+C
+        const range = document.createRange();
+        range.selectNodeContents(transcript);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        setStatus("Selected transcript — press Ctrl+C to copy.");
       }
     });
 
     runBtn.addEventListener("click", async () => {
       if (!state.file) return;
-
       persistBaseUrl();
       runBtn.disabled = true;
       clearBtn.disabled = true;
-      setStatus(
-        state.mode === "page"
-          ? "Segmenting lines and recognizing… this can take a moment."
-          : "Recognizing line…",
-        "busy"
-      );
-      results.classList.remove("show");
+      setStatus("Recognizing…", "busy");
+      resetTranscript();
 
       try {
         const kind = await detectApiKind();
-        const data =
-          kind === "gradio"
-            ? await recognizeViaGradio()
-            : await recognizeViaFlask();
+        const data = kind === "gradio"
+          ? await recognizeViaGradio()
+          : await recognizeViaFlask();
 
-        if (state.mode === "page") {
-          state.lastText = data.full_text || "";
-          fullText.textContent = state.lastText || "(no text detected)";
-          lineList.innerHTML = "";
-          const lines = data.lines || [];
-          const count = data.line_count != null ? data.line_count : lines.length;
-          lines.forEach((line, i) => {
-            const row = document.createElement("div");
-            row.className = "line-item";
-            row.innerHTML = `<div class="n">${i + 1}</div><div class="t"></div>`;
-            row.querySelector(".t").textContent = line || "—";
-            lineList.appendChild(row);
-          });
-          results.classList.add("show");
-          setStatus(
-            `Done · automatically detected ${count} line${count === 1 ? "" : "s"} (${kind}).`
-          );
-        } else {
-          state.lastText = data.text || "";
-          fullText.textContent = state.lastText || "(no text detected)";
-          lineList.innerHTML = "";
-          results.classList.add("show");
-          setStatus(`Done (${kind}).`);
-        }
+        const lines = data.lines || (data.text != null ? [data.text] : []);
+        state.lastText = data.full_text || data.text || lines.join("\n");
+        const count = data.line_count != null ? data.line_count : lines.length;
+        const seg = data.segmenter ? ` · ${data.segmenter}` : "";
+        renderTranscript(lines, `${count} line${count === 1 ? "" : "s"}${seg}`);
+        setStatus(`Done · ${count} line${count === 1 ? "" : "s"}${seg} · ${kind}`);
       } catch (err) {
         setStatus(err.message || "Something went wrong.", "error");
       } finally {

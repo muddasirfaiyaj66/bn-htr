@@ -13,3 +13,4 @@ editdistance
 tqdm
 matplotlib
 flask
+ultralytics

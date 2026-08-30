@@ -1,108 +1,111 @@
 """
 app.py
 
-A minimal REST API + browser UI that serves the trained model.
+Flask REST API and browser UI for Bangla HTR.
 
-Usage (local — defaults are enough):
+Usage:
     python app.py
-
-Optional overrides:
     python app.py --checkpoint checkpoints\\best.pt --port 5000
 
-Environment variables (useful on Hugging Face Spaces / cloud):
-    CHECKPOINT   path to .pt weights  (default: checkpoints/best.pt)
-    HOST         bind address         (default: 0.0.0.0)
-    PORT         bind port            (default: 5000)
+Environment:
+    CHECKPOINT, LINE_DETECTOR, HOST, PORT
 
-Open the browser UI at http://localhost:5000/
-
-Or send a page/line image via the API:
-
-    curl -X POST http://localhost:5000/recognize_page ^
-        -F "image=@path\\to\\page.jpg"
-
-    curl -X POST http://localhost:5000/recognize_line ^
-        -F "image=@path\\to\\line.jpg"
-
-Response (JSON):
-    { "lines": ["...", "..."], "full_text": "...\\n...", "line_count": N }
-    { "text": "..." }
+Endpoints:
+    POST /recognize
+    POST /recognize_page
+    POST /recognize_line
+    GET  /health
 """
 
 import argparse
 import os
 import tempfile
 
-import cv2
-import torch
 from flask import Flask, request, jsonify, render_template
+import torch
 
-from dataset import preprocess_image
 from model import CRNN
-from segment_lines import segment_page
-from infer import ctc_greedy_decode_single
+from recognize import Recognizer
+from segment_lines import resolve_detector_weights
 
-# Project root = folder containing this file (works locally and on HF Spaces)
 _ROOT = os.path.dirname(os.path.abspath(__file__))
 _DEFAULT_CHECKPOINT = os.path.join(_ROOT, "checkpoints", "best.pt")
 _FALLBACK_CHECKPOINT = os.path.join(_ROOT, "checkpoints", "last.pt")
 
 app = Flask(__name__)
 
-# populated at startup in main()
-_model = None
-_idx2char = None
+_recognizer = None
 _device = None
 
 
 @app.after_request
 def add_cors_headers(response):
-    # Lets a separately hosted UI (HF Space, static site, etc.) call this API.
     response.headers["Access-Control-Allow-Origin"] = "*"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type"
-    # Avoid browsers keeping a stale UI that calls the wrong API style
-    if request.path == "/" or response.content_type and "text/html" in response.content_type:
+    if request.path == "/" or (
+        response.content_type and "text/html" in response.content_type
+    ):
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
         response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
     return response
 
 
-def recognize_line_image(img_path):
-    img = preprocess_image(img_path, augment=False)
-    tensor = torch.from_numpy(img).unsqueeze(0).to(_device)
-    with torch.no_grad():
-        logits = _model(tensor)[0]
-    return ctc_greedy_decode_single(logits, _idx2char)
+def _save_upload():
+    if "image" not in request.files:
+        return None, (jsonify({"error": "no 'image' file in request"}), 400)
+    file = request.files["image"]
+    tmp = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
+    file.save(tmp.name)
+    tmp.close()
+    return tmp.name, None
 
 
 @app.route("/", methods=["GET"])
 def index():
-    return render_template("index.html", ui_version="2026-08-30-gradio")
+    return render_template("index.html", ui_version="2026-08-31-nav2")
 
 
 @app.route("/health", methods=["GET", "OPTIONS"])
 def health():
     if request.method == "OPTIONS":
         return ("", 204)
-    return jsonify({"status": "ok", "device": str(_device)})
+    detector = resolve_detector_weights()
+    return jsonify(
+        {
+            "status": "ok",
+            "device": str(_device),
+            "line_detector": bool(detector),
+            "line_detector_path": detector,
+        }
+    )
+
+
+@app.route("/recognize", methods=["POST", "OPTIONS"])
+def recognize():
+    if request.method == "OPTIONS":
+        return ("", 204)
+    tmp_path, err = _save_upload()
+    if err:
+        return err
+    try:
+        result = _recognizer.recognize(tmp_path)
+        return jsonify(result)
+    finally:
+        os.unlink(tmp_path)
 
 
 @app.route("/recognize_line", methods=["POST", "OPTIONS"])
 def recognize_line():
     if request.method == "OPTIONS":
         return ("", 204)
-    if "image" not in request.files:
-        return jsonify({"error": "no 'image' file in request"}), 400
-
-    file = request.files["image"]
-    with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
-        file.save(tmp.name)
-        tmp_path = tmp.name
-
+    tmp_path, err = _save_upload()
+    if err:
+        return err
     try:
-        text = recognize_line_image(tmp_path)
-        return jsonify({"text": text})
+        result = _recognizer.recognize(tmp_path, force_mode="line")
+        return jsonify({"text": result["full_text"]})
     finally:
         os.unlink(tmp_path)
 
@@ -111,34 +114,17 @@ def recognize_line():
 def recognize_page():
     if request.method == "OPTIONS":
         return ("", 204)
-    if "image" not in request.files:
-        return jsonify({"error": "no 'image' file in request"}), 400
-
-    file = request.files["image"]
-    with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
-        file.save(tmp.name)
-        tmp_path = tmp.name
-
+    tmp_path, err = _save_upload()
+    if err:
+        return err
     try:
-        _, line_imgs = segment_page(tmp_path)
-        results = []
-        with tempfile.TemporaryDirectory() as line_dir:
-            for i, line_img in enumerate(line_imgs, 1):
-                line_path = os.path.join(line_dir, f"line_{i}.jpg")
-                cv2.imwrite(line_path, line_img)
-                results.append(recognize_line_image(line_path))
-
-        return jsonify({
-            "lines": results,
-            "full_text": "\n".join(results),
-            "line_count": len(results),
-        })
+        result = _recognizer.recognize(tmp_path, force_mode="page")
+        return jsonify(result)
     finally:
         os.unlink(tmp_path)
 
 
 def resolve_checkpoint(cli_value):
-    """Pick checkpoint from CLI, env, or default files next to app.py."""
     candidates = []
     if cli_value:
         candidates.append(cli_value)
@@ -163,17 +149,13 @@ def resolve_checkpoint(cli_value):
 
 
 def main():
-    global _model, _idx2char, _device
+    global _recognizer, _device
 
     default_host = os.environ.get("HOST", "0.0.0.0")
     default_port = int(os.environ.get("PORT", "5000"))
 
     ap = argparse.ArgumentParser(description="BN-HTR API + UI")
-    ap.add_argument(
-        "--checkpoint",
-        default=None,
-        help="Path to .pt weights (default: checkpoints/best.pt or $CHECKPOINT)",
-    )
+    ap.add_argument("--checkpoint", default=None)
     ap.add_argument("--host", default=default_host)
     ap.add_argument("--port", type=int, default=default_port)
     args = ap.parse_args()
@@ -184,14 +166,17 @@ def main():
         ckpt = torch.load(checkpoint, map_location=_device, weights_only=False)
     except TypeError:
         ckpt = torch.load(checkpoint, map_location=_device)
-    _idx2char = ckpt["idx2char"]
+    idx2char = ckpt["idx2char"]
     num_classes = len(ckpt["char2idx"]) + 1
 
-    _model = CRNN(num_classes=num_classes).to(_device)
-    _model.load_state_dict(ckpt["model_state"])
-    _model.eval()
+    model = CRNN(num_classes=num_classes).to(_device)
+    model.load_state_dict(ckpt["model_state"])
+    model.eval()
+    _recognizer = Recognizer(model, idx2char, _device)
 
+    detector = resolve_detector_weights()
     print(f"Checkpoint: {checkpoint}")
+    print(f"Line detector: {detector or '(classical fallback)'}")
     print(f"Model loaded on {_device}. Serving on http://{args.host}:{args.port}")
     app.run(host=args.host, port=args.port)
 
