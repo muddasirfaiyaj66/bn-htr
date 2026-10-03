@@ -59,12 +59,48 @@ def clean_line(img, binarize=False):
     return img
 
 
-def preprocess_array(img, target_h=IMG_HEIGHT, max_w=None, augment=False, clean=False, binarize=False):
-    """Convert a grayscale uint8 image to a (1, H, W) float32 tensor."""
+def _to_model_tensor(img):
+    """Map a uint8 line image to the CRNN's float range."""
+    padded = img.astype(np.float32) / 255.0
+    padded = (padded - 0.5) / 0.5
+    return padded[np.newaxis, :, :]
+
+
+def preprocess_array(
+    img,
+    target_h=IMG_HEIGHT,
+    max_w=None,
+    augment=False,
+    clean=False,
+    binarize=False,
+    enhanced=False,
+    sauvola=False,
+    channel="auto",
+    allow_wide=False,
+):
+    """Convert a line image to a (1, H, W) float32 tensor."""
     if max_w is None:
         max_w = IMG_MAX_WIDTH
     if img is None or img.size == 0:
         raise ValueError("Empty image passed to preprocess_array")
+
+    if enhanced:
+        from preprocess import PreprocessConfig, preprocess_line
+
+        if augment:
+            img = _augment(img)
+        prepared = preprocess_line(
+            img,
+            PreprocessConfig(
+                target_h=target_h,
+                max_w=max_w,
+                sauvola=sauvola,
+                channel=channel,
+                allow_wide=allow_wide,
+            ),
+        )
+        return _to_model_tensor(prepared)
+
     if img.ndim == 3:
         if img.shape[2] == 1:
             img = img[:, :, 0]
@@ -88,24 +124,44 @@ def preprocess_array(img, target_h=IMG_HEIGHT, max_w=None, augment=False, clean=
 
     padded = np.ones((target_h, max_w), dtype=np.uint8) * 255
     padded[:, :new_w] = img
-
-    padded = padded.astype(np.float32) / 255.0
-    padded = (padded - 0.5) / 0.5
-    return padded[np.newaxis, :, :]
+    return _to_model_tensor(padded)
 
 
-def preprocess_image(img_path, target_h=IMG_HEIGHT, max_w=None, augment=False, clean=False, binarize=False):
+def preprocess_image(
+    img_path,
+    target_h=IMG_HEIGHT,
+    max_w=None,
+    augment=False,
+    clean=False,
+    binarize=False,
+    enhanced=False,
+    sauvola=False,
+    channel="auto",
+    allow_wide=False,
+):
     if max_w is None:
         max_w = IMG_MAX_WIDTH
-    img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+    flag = cv2.IMREAD_COLOR if enhanced else cv2.IMREAD_GRAYSCALE
+    img = cv2.imread(img_path, flag)
     if img is None:
         raise FileNotFoundError(f"Could not read image: {img_path}")
     return preprocess_array(
-        img, target_h=target_h, max_w=max_w, augment=augment, clean=clean, binarize=binarize
+        img,
+        target_h=target_h,
+        max_w=max_w,
+        augment=augment,
+        clean=clean,
+        binarize=binarize,
+        enhanced=enhanced,
+        sauvola=sauvola,
+        channel=channel,
+        allow_wide=allow_wide,
     )
 
 
 def _augment(img):
+    if img.ndim == 3:
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY if img.shape[2] == 3 else cv2.COLOR_BGRA2GRAY)
     h, w = img.shape
 
     if random.random() < 0.6:
@@ -146,12 +202,15 @@ def _augment(img):
 
 
 class BNHTRDataset(Dataset):
-    def __init__(self, csv_path, char2idx, augment=False, clean=False, binarize=False):
+    def __init__(self, csv_path, char2idx, augment=False, clean=False, binarize=False, enhanced=False, sauvola=False, channel="auto"):
         self.rows = load_manifest(csv_path)
         self.char2idx = char2idx
         self.augment = augment
         self.clean = clean
         self.binarize = binarize
+        self.enhanced = enhanced
+        self.sauvola = sauvola
+        self.channel = channel
 
     def __len__(self):
         return len(self.rows)
@@ -159,7 +218,14 @@ class BNHTRDataset(Dataset):
     def __getitem__(self, idx):
         img_path, text = self.rows[idx]
         img = preprocess_image(
-            img_path, augment=self.augment, clean=self.clean, binarize=self.binarize
+            img_path,
+            augment=self.augment,
+            clean=self.clean,
+            binarize=self.binarize,
+            enhanced=self.enhanced,
+            sauvola=self.sauvola,
+            channel=self.channel,
+            allow_wide=False,
         )
         label = [self.char2idx[c] for c in text if c in self.char2idx]
         return torch.from_numpy(img), torch.tensor(label, dtype=torch.long), text

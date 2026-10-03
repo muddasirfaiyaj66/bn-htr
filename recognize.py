@@ -4,6 +4,11 @@ recognize.py
 Recognize Bangla handwritten text from a page or line image.
 """
 
+from __future__ import annotations
+
+import argparse
+import logging
+
 import cv2
 import torch
 
@@ -13,6 +18,8 @@ from infer import ctc_greedy_decode_single
 from model import CRNN
 from segment_lines import looks_like_single_line, segment_page
 
+logger = logging.getLogger(__name__)
+
 
 def load_torch_checkpoint(path, device):
     try:
@@ -21,7 +28,7 @@ def load_torch_checkpoint(path, device):
         return torch.load(path, map_location=device)
 
 
-def build_crnn_recognizer(ckpt, device):
+def build_crnn_recognizer(ckpt, device, enhanced=False, sauvola=False, channel="auto"):
     idx2char = ckpt["idx2char"]
     if idx2char and isinstance(next(iter(idx2char)), str):
         idx2char = {int(k): v for k, v in idx2char.items()}
@@ -35,11 +42,14 @@ def build_crnn_recognizer(ckpt, device):
         device,
         clean=bool(ckpt.get("clean", False)),
         binarize=bool(ckpt.get("binarize", False)),
+        enhanced=enhanced,
+        sauvola=sauvola,
+        channel=channel,
     )
 
 
 class Recognizer:
-    def __init__(self, model, idx2char, device, lm=None, beam_width=8, lm_weight=0.15, lexicon=True, clean=False, binarize=False):
+    def __init__(self, model, idx2char, device, lm=None, beam_width=8, lm_weight=0.15, lexicon=True, clean=False, binarize=False, enhanced=False, sauvola=False, channel="auto"):
         self.model = model
         self.idx2char = idx2char
         self.device = device
@@ -49,6 +59,15 @@ class Recognizer:
         self.lexicon = lexicon
         self.clean = clean or binarize
         self.binarize = binarize
+        self.enhanced = enhanced
+        self.sauvola = sauvola
+        self.channel = channel
+        self.lm_loaded = self.lm is not None
+        self.decoder_name = "ctc-prefix-beam+char-lm" if self.lm_loaded else "greedy"
+        if self.lm_loaded:
+            logger.info("Language model loaded from data/lm.json. Decoder: %s", self.decoder_name)
+        else:
+            logger.info("Language model not loaded. Decoder: greedy CTC")
 
     def recognize_array(self, gray_img):
         if gray_img is not None and gray_img.ndim == 3 and gray_img.shape[2] == 1:
@@ -59,6 +78,10 @@ class Recognizer:
             augment=False,
             clean=self.clean,
             binarize=self.binarize,
+            enhanced=self.enhanced,
+            sauvola=self.sauvola,
+            channel=self.channel,
+            allow_wide=True,
         )
         tensor = torch.from_numpy(arr).unsqueeze(0).to(self.device)
         with torch.no_grad():
@@ -75,11 +98,15 @@ class Recognizer:
             lexicon=self.lexicon,
         )
 
-    def recognize_line_path(self, img_path):
-        img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+    def _read_image(self, img_path):
+        flag = cv2.IMREAD_COLOR if self.enhanced else cv2.IMREAD_GRAYSCALE
+        img = cv2.imread(img_path, flag)
         if img is None:
             raise FileNotFoundError(img_path)
-        return self.recognize_array(img)
+        return img
+
+    def recognize_line_path(self, img_path):
+        return self.recognize_array(self._read_image(img_path))
 
     def recognize(self, img_path, force_mode=None, detector_weights=None):
         """
@@ -88,9 +115,7 @@ class Recognizer:
         force_mode: None | "line" | "page"
         Returns dict: lines, full_text, line_count, mode, segmenter
         """
-        img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
-        if img is None:
-            raise FileNotFoundError(img_path)
+        img = self._read_image(img_path)
 
         if force_mode == "line" or (
             force_mode is None and looks_like_single_line(img)

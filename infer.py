@@ -13,7 +13,7 @@ import os
 
 import torch
 
-from dataset import preprocess_image
+from dataset import IMG_MAX_WIDTH_INFER, preprocess_image
 from decode import decode_log_probs, load_lm, logits_to_log_probs
 from model import CRNN
 
@@ -36,6 +36,9 @@ def main():
     ap.add_argument("--dir", help="Path to a folder of line images (processed in filename order)")
     ap.add_argument("--lm", default=None, help="Character LM json. Defaults to data/lm.json when present")
     ap.add_argument("--greedy", action="store_true", help="Use greedy CTC instead of beam search")
+    ap.add_argument("--enhanced", action="store_true", help="Use preprocess.preprocess_line (colour ink, CLAHE, crop)")
+    ap.add_argument("--sauvola", action="store_true", help="Sauvola-binarize inside the enhanced preprocessor")
+    ap.add_argument("--channel", default="auto", help="Ink channel: auto, gray, min, green, lab_l")
     args = ap.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -53,7 +56,17 @@ def main():
     binarize = bool(ckpt.get("binarize", False))
 
     def recognize(img_path):
-        img = preprocess_image(img_path, augment=False, clean=clean, binarize=binarize)
+        img = preprocess_image(
+            img_path,
+            augment=False,
+            clean=clean,
+            binarize=binarize,
+            enhanced=args.enhanced,
+            sauvola=args.sauvola,
+            channel=args.channel,
+            allow_wide=True,
+            max_w=IMG_MAX_WIDTH_INFER,
+        )
         tensor = torch.from_numpy(img).unsqueeze(0).to(device)  # (1, 1, H, W)
         with torch.no_grad():
             logits = model(tensor)[0]  # (T, C)

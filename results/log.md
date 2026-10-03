@@ -7,3 +7,6 @@ Ground truth: `কিংকর্তব্যবিমূঢ়`. Baseline predi
 | Step | CER | WER | Delta CER | Delta WER | What changed |
 |------|-----|-----|-----------|-----------|--------------|
 | baseline | 0.2667 | 1.0000 | 0 | 0 | Current CRNN path. 4 of 15 characters wrong. |
+| preprocess enhanced | 0.4000 | 2.0000 | +0.1333 | +1.0000 | Channel pick, illumination divide, CLAHE, crop, deskew. Prediction `কর্তব্য বিমু`. Worse, so the app default stays the legacy path. |
+| preprocess enhanced + Sauvola | 0.2667 | 2.0000 | 0 | +1.0000 | Same CER as baseline, extra space splits the word (`কিং কর্তব্যবিশু`). Sauvola stays off by default. |
+| ink channel only | 0.2667 | 1.0000 | 0 | 0 | gray / min / green / Lab-L / auto all match the baseline prediction on this photo. |

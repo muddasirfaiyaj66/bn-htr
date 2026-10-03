@@ -121,6 +121,9 @@ def main():
         help="Folder of line images with a same-stem UTF-8 .txt ground truth",
     )
     ap.add_argument("--out_json", default=None, help="Write sample-folder metrics to this JSON file")
+    ap.add_argument("--enhanced", action="store_true", help="Score samples with preprocess_line")
+    ap.add_argument("--sauvola", action="store_true", help="Sauvola threshold inside preprocess_line")
+    ap.add_argument("--channel", default="auto")
     args = ap.parse_args()
 
     if not args.test_csv and not args.samples_dir:
@@ -191,7 +194,9 @@ def main():
         from recognize import build_crnn_recognizer, load_torch_checkpoint
 
         rec_ckpt = load_torch_checkpoint(args.checkpoint, device)
-        recognizer = build_crnn_recognizer(rec_ckpt, device)
+        recognizer = build_crnn_recognizer(
+            rec_ckpt, device, enhanced=args.enhanced, sauvola=args.sauvola, channel=args.channel
+        )
         metrics = evaluate_sample_dir(recognizer.recognize_line_path, args.samples_dir)
         print(f"\n=== Real samples ({metrics['n']} lines) ===")
         print(f"Character Error Rate (CER): {metrics['cer']:.4f}  ({metrics['cer']*100:.2f}%)")
@@ -202,7 +207,8 @@ def main():
         payload = {
             "checkpoint": os.path.abspath(args.checkpoint),
             "samples_dir": os.path.abspath(args.samples_dir),
-            "preprocess": "legacy",
+            "preprocess": "enhanced+sauvola" if args.enhanced and args.sauvola else ("enhanced" if args.enhanced else "legacy"),
+            "channel": args.channel,
             "cer": metrics["cer"],
             "wer": metrics["wer"],
             "n": metrics["n"],

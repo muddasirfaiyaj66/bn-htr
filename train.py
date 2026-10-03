@@ -108,6 +108,9 @@ def main():
     )
     ap.add_argument("--clean", action="store_true", help="Deskew and flatten illumination before the network")
     ap.add_argument("--binarize", action="store_true", help="Otsu-binarize the line after deskew")
+    ap.add_argument("--enhanced", action="store_true", help="Use preprocess.preprocess_line for train and val")
+    ap.add_argument("--sauvola", action="store_true", help="Sauvola threshold inside the enhanced preprocessor")
+    ap.add_argument("--channel", default="auto", help="Ink channel for --enhanced: auto, gray, min, green, lab_l")
     args = ap.parse_args()
 
     os.makedirs(args.out_dir, exist_ok=True)
@@ -120,10 +123,12 @@ def main():
     num_classes = len(char2idx) + 1  # +1 for CTC blank
 
     train_ds = BNHTRDataset(
-        args.train_csv, char2idx, augment=True, clean=args.clean, binarize=args.binarize
+        args.train_csv, char2idx, augment=True, clean=args.clean, binarize=args.binarize,
+        enhanced=args.enhanced, sauvola=args.sauvola, channel=args.channel,
     )
     val_ds = BNHTRDataset(
-        args.val_csv, char2idx, augment=False, clean=args.clean, binarize=args.binarize
+        args.val_csv, char2idx, augment=False, clean=args.clean, binarize=args.binarize,
+        enhanced=args.enhanced, sauvola=args.sauvola, channel=args.channel,
     )
     if args.clean or args.binarize:
         print(f"Preprocess: deskew+flatten={args.clean or args.binarize}  otsu={args.binarize}")
