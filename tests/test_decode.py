@@ -21,9 +21,15 @@ from decode import (  # noqa: E402
     score_text,
 )
 from normalize import normalize_bangla  # noqa: E402
+from vocab import grapheme_clusters  # noqa: E402
 
 
 class DecodeTest(unittest.TestCase):
+    def test_hasanta_stays_inside_one_cluster(self):
+        clusters = [c for c in grapheme_clusters("ক্ত") if not c.isspace()]
+        self.assertEqual(clusters, ["ক্ত"])
+        self.assertEqual([c for c in grapheme_clusters("কি") if not c.isspace()], ["কি"])
+
     def test_nukta_forms_compose(self):
         self.assertEqual(normalize_bangla("ঢ\u09bc"), "\u09dd")
         self.assertEqual(normalize_bangla("ড\u09bc"), "\u09dc")

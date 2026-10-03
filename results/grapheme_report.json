@@ -1,0 +1,10 @@
+{
+  "lines": 18696,
+  "char_vocab": 171,
+  "grapheme_vocab": 1394,
+  "mean_chars": 41.67329910141207,
+  "mean_graphemes": 20.75887890457852,
+  "conjunct_fraction": 0.09724355076422027,
+  "adopted": false,
+  "reason": "A grapheme vocabulary changes every CTC target and needs a full retrain. Character error rate was not measured, so the character vocabulary stays."
+}

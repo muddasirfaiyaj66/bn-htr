@@ -12,6 +12,8 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
+from normalize import normalize_bangla
+
 IMG_HEIGHT = 64
 IMG_MAX_WIDTH = 800
 IMG_MAX_WIDTH_INFER = 1280
@@ -217,6 +219,7 @@ class BNHTRDataset(Dataset):
 
     def __getitem__(self, idx):
         img_path, text = self.rows[idx]
+        text = normalize_bangla(text)
         img = preprocess_image(
             img_path,
             augment=self.augment,

@@ -25,6 +25,7 @@ from decode import (
 )
 from infer import ctc_greedy_decode_single
 from model import CRNN
+from normalize import normalize_bangla
 from segment_lines import looks_like_single_line, segment_page
 
 logger = logging.getLogger(__name__)
@@ -137,7 +138,7 @@ class Recognizer:
                 )
         if self.post_correct and self.lm is not None:
             text = correct_with_lm(text, self.lm, margin=self.lm_margin)
-        return text
+        return normalize_bangla(text)
 
     def recognize_detail(self, image):
         """Return text plus the CTC arrays for tuning and confidence."""

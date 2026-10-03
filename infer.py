@@ -17,6 +17,7 @@ import torch
 from dataset import IMG_MAX_WIDTH_INFER, preprocess_image
 from decode import correct_with_lm, decode_log_probs, describe_decoder, find_lm_path, load_lm, logits_to_log_probs
 from model import CRNN
+from normalize import normalize_bangla
 
 
 def ctc_greedy_decode_single(logits, idx2char):
@@ -81,7 +82,7 @@ def main():
             text = decode_log_probs(log_probs, idx2char, lm=lm, lexicon=not args.post_correct)
         if args.post_correct and lm is not None:
             text = correct_with_lm(text, lm)
-        return text
+        return normalize_bangla(text)
 
     if args.image:
         print(recognize(args.image))

@@ -23,6 +23,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from dataset import BNHTRDataset, collate_fn
+from normalize import normalize_bangla
 from decode import decode_log_probs, load_lm, logits_to_log_probs
 from model import CRNN
 from train import ctc_greedy_decode  # reuse the same decoder used during training
@@ -35,8 +36,8 @@ def score_texts(predictions, targets):
     total_cer_dist, total_cer_len = 0, 0
     total_wer_dist, total_wer_len = 0, 0
     for pred, target in zip(predictions, targets):
-        pred = pred or ""
-        target = target or ""
+        pred = normalize_bangla(pred or "")
+        target = normalize_bangla(target or "")
         total_cer_dist += editdistance.eval(pred, target)
         total_cer_len += max(len(target), 1)
         pred_words = pred.split()
