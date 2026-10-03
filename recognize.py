@@ -8,24 +8,72 @@ import cv2
 import torch
 
 from dataset import IMG_MAX_WIDTH_INFER, preprocess_array
+from decode import decode_log_probs, load_lm, logits_to_log_probs
 from infer import ctc_greedy_decode_single
+from model import CRNN
 from segment_lines import looks_like_single_line, segment_page
 
 
+def load_torch_checkpoint(path, device):
+    try:
+        return torch.load(path, map_location=device, weights_only=False)
+    except TypeError:
+        return torch.load(path, map_location=device)
+
+
+def build_crnn_recognizer(ckpt, device):
+    idx2char = ckpt["idx2char"]
+    if idx2char and isinstance(next(iter(idx2char)), str):
+        idx2char = {int(k): v for k, v in idx2char.items()}
+    num_classes = len(ckpt["char2idx"]) + 1
+    model = CRNN(num_classes=num_classes).to(device)
+    model.load_state_dict(ckpt["model_state"])
+    model.eval()
+    return Recognizer(
+        model,
+        idx2char,
+        device,
+        clean=bool(ckpt.get("clean", False)),
+        binarize=bool(ckpt.get("binarize", False)),
+    )
+
+
 class Recognizer:
-    def __init__(self, model, idx2char, device):
+    def __init__(self, model, idx2char, device, lm=None, beam_width=8, lm_weight=0.15, lexicon=True, clean=False, binarize=False):
         self.model = model
         self.idx2char = idx2char
         self.device = device
+        self.lm = lm if lm is not None else load_lm()
+        self.beam_width = beam_width
+        self.lm_weight = lm_weight
+        self.lexicon = lexicon
+        self.clean = clean or binarize
+        self.binarize = binarize
 
     def recognize_array(self, gray_img):
         if gray_img is not None and gray_img.ndim == 3 and gray_img.shape[2] == 1:
             gray_img = gray_img[:, :, 0]
-        arr = preprocess_array(gray_img, max_w=IMG_MAX_WIDTH_INFER, augment=False)
+        arr = preprocess_array(
+            gray_img,
+            max_w=IMG_MAX_WIDTH_INFER,
+            augment=False,
+            clean=self.clean,
+            binarize=self.binarize,
+        )
         tensor = torch.from_numpy(arr).unsqueeze(0).to(self.device)
         with torch.no_grad():
             logits = self.model(tensor)[0]
-        return ctc_greedy_decode_single(logits, self.idx2char)
+        if self.lm is None or self.beam_width <= 1:
+            return ctc_greedy_decode_single(logits, self.idx2char)
+        log_probs = logits_to_log_probs(logits.detach().float().cpu().numpy())
+        return decode_log_probs(
+            log_probs,
+            self.idx2char,
+            lm=self.lm,
+            beam_width=self.beam_width,
+            lm_weight=self.lm_weight,
+            lexicon=self.lexicon,
+        )
 
     def recognize_line_path(self, img_path):
         img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)

@@ -37,6 +37,33 @@ def ctc_greedy_decode(logits, idx2char):
     return results
 
 
+def remap_classifier(state, old_char2idx, new_char2idx):
+    """Copy matching character rows into a classifier sized for `new_char2idx`."""
+    old_w = state["fc.weight"]
+    old_b = state["fc.bias"]
+    new_classes = len(new_char2idx) + 1
+    if old_w.shape[0] == new_classes and old_char2idx == new_char2idx:
+        return state, False
+
+    new_w = torch.empty(new_classes, old_w.shape[1], dtype=old_w.dtype)
+    new_b = torch.zeros(new_classes, dtype=old_b.dtype)
+    torch.nn.init.normal_(new_w, std=0.01)
+    new_w[0].copy_(old_w[0])
+    new_b[0].copy_(old_b[0])
+    for ch, new_i in new_char2idx.items():
+        old_i = old_char2idx.get(ch)
+        if old_i is None:
+            continue
+        old_i = int(old_i)
+        if old_i <= 0 or old_i >= old_w.shape[0]:
+            continue
+        new_w[int(new_i)].copy_(old_w[old_i])
+        new_b[int(new_i)].copy_(old_b[old_i])
+    state["fc.weight"] = new_w
+    state["fc.bias"] = new_b
+    return state, True
+
+
 def evaluate(model, loader, idx2char, device):
     model.eval()
     total_cer_dist, total_cer_len = 0, 0
@@ -69,6 +96,18 @@ def main():
     ap.add_argument("--out_dir", default="checkpoints")
     ap.add_argument("--num_workers", type=int, default=4)
     ap.add_argument("--resume", default=None, help="Path to a checkpoint to resume from")
+    ap.add_argument(
+        "--fresh_optim",
+        action="store_true",
+        help="Start a new optimizer (use when fine-tuning on a larger vocabulary)",
+    )
+    ap.add_argument(
+        "--reset_best",
+        action="store_true",
+        help="Ignore the checkpoint's best CER so the new validation set can save best.pt",
+    )
+    ap.add_argument("--clean", action="store_true", help="Deskew and flatten illumination before the network")
+    ap.add_argument("--binarize", action="store_true", help="Otsu-binarize the line after deskew")
     args = ap.parse_args()
 
     os.makedirs(args.out_dir, exist_ok=True)
@@ -80,8 +119,14 @@ def main():
     char2idx, idx2char = load_vocab(args.vocab)
     num_classes = len(char2idx) + 1  # +1 for CTC blank
 
-    train_ds = BNHTRDataset(args.train_csv, char2idx, augment=True)
-    val_ds = BNHTRDataset(args.val_csv, char2idx, augment=False)
+    train_ds = BNHTRDataset(
+        args.train_csv, char2idx, augment=True, clean=args.clean, binarize=args.binarize
+    )
+    val_ds = BNHTRDataset(
+        args.val_csv, char2idx, augment=False, clean=args.clean, binarize=args.binarize
+    )
+    if args.clean or args.binarize:
+        print(f"Preprocess: deskew+flatten={args.clean or args.binarize}  otsu={args.binarize}")
 
     train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True,
                                num_workers=args.num_workers, collate_fn=collate_fn, pin_memory=True)
@@ -97,12 +142,20 @@ def main():
     best_cer = float("inf")
 
     if args.resume and os.path.exists(args.resume):
-        ckpt = torch.load(args.resume, map_location=device)
-        model.load_state_dict(ckpt["model_state"])
-        optimizer.load_state_dict(ckpt["optimizer_state"])
-        start_epoch = ckpt["epoch"] + 1
-        best_cer = ckpt.get("best_cer", float("inf"))
-        print(f"Resumed from {args.resume} at epoch {start_epoch}")
+        ckpt = torch.load(args.resume, map_location=device, weights_only=False)
+        state = ckpt["model_state"]
+        state, remapped = remap_classifier(state, ckpt.get("char2idx") or {}, char2idx)
+        model.load_state_dict(state)
+        if remapped:
+            print(f"Expanded the final layer from {len(ckpt.get('char2idx') or {})} to {len(char2idx)} characters")
+        if remapped or args.fresh_optim:
+            print("Optimizer starts fresh at the requested learning rate")
+        else:
+            optimizer.load_state_dict(ckpt["optimizer_state"])
+            start_epoch = ckpt["epoch"] + 1
+        if not args.reset_best and not remapped:
+            best_cer = ckpt.get("best_cer", float("inf"))
+        print(f"Loaded weights from {args.resume}")
 
     for epoch in range(start_epoch, args.epochs):
         model.train()
@@ -143,6 +196,8 @@ def main():
             "best_cer": best_cer,
             "char2idx": char2idx,
             "idx2char": idx2char,
+            "clean": args.clean or args.binarize,
+            "binarize": args.binarize,
         }
         torch.save(ckpt, os.path.join(args.out_dir, "last.pt"))
 

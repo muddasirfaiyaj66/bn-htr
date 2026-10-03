@@ -13,8 +13,7 @@ import os
 import cv2
 import torch
 
-from model import CRNN
-from recognize import Recognizer
+from recognize import build_crnn_recognizer, load_torch_checkpoint
 from segment_lines import segment_page
 
 
@@ -28,17 +27,8 @@ def main():
     args = ap.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    try:
-        ckpt = torch.load(args.checkpoint, map_location=device, weights_only=False)
-    except TypeError:
-        ckpt = torch.load(args.checkpoint, map_location=device)
-    idx2char = ckpt["idx2char"]
-    num_classes = len(ckpt["char2idx"]) + 1
-
-    model = CRNN(num_classes=num_classes).to(device)
-    model.load_state_dict(ckpt["model_state"])
-    model.eval()
-    recognizer = Recognizer(model, idx2char, device)
+    ckpt = load_torch_checkpoint(args.checkpoint, device)
+    recognizer = build_crnn_recognizer(ckpt, device)
 
     force = None
     if args.force_page:

@@ -17,6 +17,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from dataset import BNHTRDataset, collate_fn
+from decode import decode_log_probs, load_lm, logits_to_log_probs
 from model import CRNN
 from train import ctc_greedy_decode  # reuse the same decoder used during training
 
@@ -29,6 +30,9 @@ def main():
     ap.add_argument("--num_workers", type=int, default=4)
     ap.add_argument("--num_examples", type=int, default=10,
                      help="How many sample predictions to print")
+    ap.add_argument("--beam", action="store_true", help="Decode with the character LM beam search")
+    ap.add_argument("--lm", default=None)
+    ap.add_argument("--lexicon", action="store_true")
     args = ap.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -41,6 +45,9 @@ def main():
     model = CRNN(num_classes=num_classes).to(device)
     model.load_state_dict(ckpt["model_state"])
     model.eval()
+    lm = load_lm(args.lm) if args.beam else None
+    if args.beam and lm is None:
+        raise FileNotFoundError("Beam decoding needs data/lm.json. Build it with decode.py.")
 
     test_ds = BNHTRDataset(args.test_csv, char2idx, augment=False)
     test_loader = DataLoader(test_ds, batch_size=args.batch_size, shuffle=False,
@@ -54,7 +61,16 @@ def main():
         for imgs, labels_concat, label_lengths, texts in test_loader:
             imgs = imgs.to(device)
             logits = model(imgs)
-            preds = ctc_greedy_decode(logits, idx2char)
+            if lm is None:
+                preds = ctc_greedy_decode(logits, idx2char)
+            else:
+                log_probs = logits_to_log_probs(logits.detach().float().cpu().numpy())
+                preds = [
+                    decode_log_probs(
+                        log_probs[i], idx2char, lm=lm, lexicon=args.lexicon
+                    )
+                    for i in range(log_probs.shape[0])
+                ]
 
             for pred, target in zip(preds, texts):
                 total_cer_dist += editdistance.eval(pred, target)

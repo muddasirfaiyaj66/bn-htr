@@ -14,6 +14,7 @@ import os
 import torch
 
 from dataset import preprocess_image
+from decode import decode_log_probs, load_lm, logits_to_log_probs
 from model import CRNN
 
 
@@ -33,6 +34,8 @@ def main():
     ap.add_argument("--checkpoint", required=True)
     ap.add_argument("--image", help="Path to a single line image")
     ap.add_argument("--dir", help="Path to a folder of line images (processed in filename order)")
+    ap.add_argument("--lm", default=None, help="Character LM json. Defaults to data/lm.json when present")
+    ap.add_argument("--greedy", action="store_true", help="Use greedy CTC instead of beam search")
     args = ap.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -44,13 +47,20 @@ def main():
     model = CRNN(num_classes=num_classes).to(device)
     model.load_state_dict(ckpt["model_state"])
     model.eval()
+    lm = None if args.greedy else load_lm(args.lm)
+
+    clean = bool(ckpt.get("clean", False))
+    binarize = bool(ckpt.get("binarize", False))
 
     def recognize(img_path):
-        img = preprocess_image(img_path, augment=False)
+        img = preprocess_image(img_path, augment=False, clean=clean, binarize=binarize)
         tensor = torch.from_numpy(img).unsqueeze(0).to(device)  # (1, 1, H, W)
         with torch.no_grad():
             logits = model(tensor)[0]  # (T, C)
-        return ctc_greedy_decode_single(logits, idx2char)
+        if lm is None:
+            return ctc_greedy_decode_single(logits, idx2char)
+        log_probs = logits_to_log_probs(logits.detach().float().cpu().numpy())
+        return decode_log_probs(log_probs, idx2char, lm=lm)
 
     if args.image:
         print(recognize(args.image))

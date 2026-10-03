@@ -24,8 +24,7 @@ import tempfile
 from flask import Flask, request, jsonify, render_template
 import torch
 
-from model import CRNN
-from recognize import Recognizer
+from recognize import build_crnn_recognizer, load_torch_checkpoint
 from segment_lines import resolve_detector_weights
 
 _ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -162,17 +161,8 @@ def main():
 
     checkpoint = resolve_checkpoint(args.checkpoint)
     _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    try:
-        ckpt = torch.load(checkpoint, map_location=_device, weights_only=False)
-    except TypeError:
-        ckpt = torch.load(checkpoint, map_location=_device)
-    idx2char = ckpt["idx2char"]
-    num_classes = len(ckpt["char2idx"]) + 1
-
-    model = CRNN(num_classes=num_classes).to(_device)
-    model.load_state_dict(ckpt["model_state"])
-    model.eval()
-    _recognizer = Recognizer(model, idx2char, _device)
+    ckpt = load_torch_checkpoint(checkpoint, _device)
+    _recognizer = build_crnn_recognizer(ckpt, _device)
 
     detector = resolve_detector_weights()
     print(f"Checkpoint: {checkpoint}")

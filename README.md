@@ -42,11 +42,19 @@ The recognizer is trained on single-line crops. Full pages are segmented into li
 |-------|--------|--------|
 | Line detection | YOLOv8n fine-tuned on BN-HTRd boxes | Falls back to ink projection + OPTICS |
 | Recognition | CRNN (CNN + BiLSTM) + CTC | Character-level vocabulary |
-| Decoding | Greedy CTC | Beam search / LM optional later |
+| Decoding | CTC prefix beam search + Bangla character trigram | Falls back to greedy CTC if `data/lm.json` is missing |
 
 **CRNN input:** grayscale, height 64px, width padded (800 train / 1280 infer).
 
 ## Dataset
+
+The recognizer trains on line images from three datasets:
+
+| Dataset | Role | Link |
+|---------|------|------|
+| [BN-HTRd](https://data.mendeley.com/datasets/743k6dm543) | Document pages with line crops and word labels | Mendeley |
+| [BanglaWriting](https://data.mendeley.com/datasets/r43wkvdk4w/1) | Form pages with word boxes, grouped into lines | Mendeley |
+| [Bongabdo](https://archive.ics.uci.edu/dataset/894/bongabdo) | Phone photos of handwritten pages | UCI |
 
 [BN-HTRd](https://data.mendeley.com/datasets/743k6dm543) — document-level offline Bangla HTR and line segmentation.
 
@@ -121,12 +129,21 @@ Download `BN-HTR_Dataset.zip` from [Mendeley](https://data.mendeley.com/datasets
 
 ### 3. Build manifests and vocabulary
 
+BN-HTRd only:
+
 ```bash
 python prepare_manifest.py --dataset_root data/BN-HTR_Dataset --out_dir data
 python vocab.py --train_csv data/train.csv --val_csv data/val.csv --test_csv data/test.csv --out vocab.json
 ```
 
-Splits are writer-disjoint.
+All three datasets (BN-HTRd, BanglaWriting, and Bongabdo). Bongabdo pages are split into lines and aligned with an existing checkpoint:
+
+```bash
+python prepare_combined.py --checkpoint ..\models\v3\best.pt --out_dir data
+python vocab.py --train_csv data/train.csv --val_csv data/val.csv --test_csv data/test.csv --out data/vocab.json
+```
+
+Splits are writer-disjoint inside each dataset, then merged.
 
 ### 4. Train the recognizer
 
@@ -141,6 +158,15 @@ python train.py \
   --out_dir checkpoints
 ```
 
+Fine-tune a previous checkpoint on the combined set (new characters are added to the final layer):
+
+```bash
+python train.py ^
+  --train_csv data\train.csv --val_csv data\val.csv --vocab data\vocab.json ^
+  --resume ..\models\v3\best.pt --fresh_optim --reset_best ^
+  --epochs 20 --batch_size 64 --lr 1e-4 --out_dir ..\models\v4
+```
+
 - Writes `checkpoints/last.pt` each epoch and `checkpoints/best.pt` on best validation CER
 - Resume with `--resume checkpoints/last.pt`
 
@@ -151,6 +177,15 @@ python evaluate.py --checkpoint checkpoints/best.pt --test_csv data/test.csv
 ```
 
 Reports CER (character error rate), WER (word error rate), and sample predictions.
+
+Build the character language model once, then score the test set with beam search:
+
+```bash
+python decode.py --train_csv data/train.csv --out data/lm.json
+python evaluate.py --checkpoint checkpoints/best.pt --test_csv data/test.csv --beam
+```
+
+Training augmentation includes rotation, slant, elastic warp, and noise. Deskew and illumination flattening are available for a future training run; they are left off at inference so the current grayscale checkpoint is unchanged.
 
 ### 6. Train the line detector
 

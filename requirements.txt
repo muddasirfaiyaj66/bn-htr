@@ -14,3 +14,4 @@ tqdm
 matplotlib
 flask
 ultralytics
+transformers

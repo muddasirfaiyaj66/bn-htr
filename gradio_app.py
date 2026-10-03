@@ -23,8 +23,7 @@ import os
 import gradio as gr
 import torch
 
-from model import CRNN
-from recognize import Recognizer
+from recognize import build_crnn_recognizer, load_torch_checkpoint
 from segment_lines import resolve_detector_weights
 
 CHECKPOINT_PATH = "checkpoints/best.pt"
@@ -42,17 +41,8 @@ def load_model():
         raise FileNotFoundError(f"Checkpoint not found at {CHECKPOINT_PATH}.")
 
     _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    try:
-        ckpt = torch.load(CHECKPOINT_PATH, map_location=_device, weights_only=False)
-    except TypeError:
-        ckpt = torch.load(CHECKPOINT_PATH, map_location=_device)
-
-    idx2char = ckpt["idx2char"]
-    num_classes = len(ckpt["char2idx"]) + 1
-    model = CRNN(num_classes=num_classes).to(_device)
-    model.load_state_dict(ckpt["model_state"])
-    model.eval()
-    _recognizer = Recognizer(model, idx2char, _device)
+    ckpt = load_torch_checkpoint(CHECKPOINT_PATH, _device)
+    _recognizer = build_crnn_recognizer(ckpt, _device)
 
 
 @spaces.GPU(duration=120)
