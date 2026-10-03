@@ -52,6 +52,10 @@ segmented_out/
 *.png
 !docs/**/*.png
 !docs/**/*.jpg
+!tests/real_samples/**
+!tests/real_samples/*.jpg
+!tests/real_samples/*.jpeg
+!tests/real_samples/*.png
 
 # ===== OS / editor junk =====
 .DS_Store

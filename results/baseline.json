@@ -1,0 +1,15 @@
+{
+  "checkpoint": "F:\\BN-HTR\\bn-htr\\checkpoints\\best.pt",
+  "samples_dir": "F:\\BN-HTR\\bn-htr\\tests\\real_samples",
+  "preprocess": "legacy",
+  "cer": 0.26666666666666666,
+  "wer": 1.0,
+  "n": 1,
+  "samples": [
+    {
+      "image": "IMG-20261002-WA0000.jpg",
+      "target": "কিংকর্তব্যবিমূঢ়",
+      "prediction": "কিংবর্তব্যবিসুড়"
+    }
+  ]
+}
