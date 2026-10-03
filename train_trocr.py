@@ -100,21 +100,65 @@ def main():
     ap.add_argument("--max_length", type=int, default=128)
     ap.add_argument("--out_dir", default="checkpoints_trocr")
     ap.add_argument("--num_workers", type=int, default=0)
+    ap.add_argument("--encoder", default=None, help="Vision encoder (ViT, DeiT, or Swin). Pair with --decoder.")
+    ap.add_argument("--decoder", default=None, help="Text decoder/tokenizer, for example a Bangla BERT or mBART")
+    ap.add_argument("--lora", action="store_true", help="Train the decoder with LoRA via the optional peft package")
+    ap.add_argument("--lora_r", type=int, default=8)
+    ap.add_argument("--no_amp", action="store_true", help="Disable mixed precision")
     args = ap.parse_args()
+    if bool(args.encoder) != bool(args.decoder):
+        ap.error("Pass both --encoder and --decoder, or neither to fine-tune the TrOCR checkpoint")
 
     os.makedirs(args.out_dir, exist_ok=True)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
     print(f"Loading {args.model_name}")
 
-    processor = TrOCRProcessor.from_pretrained(args.model_name)
-    model = VisionEncoderDecoderModel.from_pretrained(args.model_name)
-    model.config.decoder_start_token_id = processor.tokenizer.cls_token_id
-    model.config.pad_token_id = processor.tokenizer.pad_token_id
-    model.config.eos_token_id = processor.tokenizer.sep_token_id
-    model.generation_config.decoder_start_token_id = processor.tokenizer.cls_token_id
-    model.generation_config.pad_token_id = processor.tokenizer.pad_token_id
-    model.generation_config.eos_token_id = processor.tokenizer.sep_token_id
+    if args.encoder and args.decoder:
+        from transformers import AutoImageProcessor, AutoTokenizer
+
+        image_processor = AutoImageProcessor.from_pretrained(args.encoder)
+        tokenizer = AutoTokenizer.from_pretrained(args.decoder)
+        model = VisionEncoderDecoderModel.from_encoder_decoder_pretrained(args.encoder, args.decoder)
+
+        class _PairProcessor:
+            """Enough of the TrOCR processor interface for the existing collate."""
+
+            def __init__(self, image_processor, tokenizer):
+                self.image_processor = image_processor
+                self.tokenizer = tokenizer
+
+            def __call__(self, images, return_tensors="pt"):
+                return self.image_processor(images, return_tensors=return_tensors)
+
+        processor = _PairProcessor(image_processor, tokenizer)
+        start_id = tokenizer.cls_token_id
+        if start_id is None:
+            start_id = tokenizer.bos_token_id if tokenizer.bos_token_id is not None else tokenizer.eos_token_id
+        pad_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else tokenizer.eos_token_id
+        eos_id = tokenizer.eos_token_id if tokenizer.eos_token_id is not None else tokenizer.sep_token_id
+    else:
+        processor = TrOCRProcessor.from_pretrained(args.model_name)
+        model = VisionEncoderDecoderModel.from_pretrained(args.model_name)
+        start_id = processor.tokenizer.cls_token_id
+        pad_id = processor.tokenizer.pad_token_id
+        eos_id = processor.tokenizer.sep_token_id
+    model.config.decoder_start_token_id = start_id
+    model.config.pad_token_id = pad_id
+    model.config.eos_token_id = eos_id
+    model.generation_config.decoder_start_token_id = start_id
+    model.generation_config.pad_token_id = pad_id
+    model.generation_config.eos_token_id = eos_id
+    if args.lora:
+        try:
+            from peft import LoraConfig, get_peft_model
+        except ImportError as exc:
+            raise SystemExit("Install peft to use --lora. The default full fine-tune does not need it.") from exc
+        model.decoder = get_peft_model(
+            model.decoder,
+            LoraConfig(r=args.lora_r, lora_alpha=args.lora_r * 2, lora_dropout=0.05, bias="none", target_modules=["q_proj", "v_proj"]),
+        )
+        print(f"LoRA on the decoder, r={args.lora_r}")
     model.generation_config.max_length = args.max_length
     model.generation_config.num_beams = 4
     model.to(device)
@@ -136,7 +180,8 @@ def main():
     )
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
-    scaler = torch.amp.GradScaler("cuda", enabled=device.type == "cuda")
+    use_amp = device.type == "cuda" and not args.no_amp
+    scaler = torch.amp.GradScaler("cuda", enabled=use_amp)
     best_cer = float("inf")
 
     for epoch in range(args.epochs):
@@ -148,7 +193,7 @@ def main():
             pixels = pixels.to(device)
             labels = labels.to(device)
             optimizer.zero_grad(set_to_none=True)
-            with torch.amp.autocast("cuda", enabled=device.type == "cuda"):
+            with torch.amp.autocast("cuda", enabled=use_amp):
                 loss = model(pixel_values=pixels, labels=labels).loss
             scaler.scale(loss).backward()
             scaler.unscale_(optimizer)

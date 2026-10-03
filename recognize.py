@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 
 import cv2
 import numpy as np
@@ -27,6 +28,21 @@ from infer import ctc_greedy_decode_single
 from model import CRNN
 from normalize import normalize_bangla
 from segment_lines import looks_like_single_line, segment_page
+
+
+def pack_result(lines, mode, segmenter, decoder, lm_loaded, lm_path):
+    """JSON payload shared by the CRNN and TrOCR engines."""
+    lines = [t if t is not None else "" for t in lines]
+    return {
+        "lines": lines,
+        "full_text": "\n".join(lines),
+        "line_count": len(lines),
+        "mode": mode,
+        "segmenter": segmenter,
+        "decoder": decoder,
+        "lm_loaded": bool(lm_loaded),
+        "lm_path": lm_path,
+    }
 
 logger = logging.getLogger(__name__)
 
@@ -191,14 +207,88 @@ class Recognizer:
         return self._pack(results, "page", segmenter)
 
     def _pack(self, lines, mode, segmenter):
-        lines = [t if t is not None else "" for t in lines]
-        return {
-            "lines": lines,
-            "full_text": "\n".join(lines),
-            "line_count": len(lines),
-            "mode": mode,
-            "segmenter": segmenter,
-            "decoder": self.decoder_name,
-            "lm_loaded": self.lm_loaded,
-            "lm_path": self.lm_path,
-        }
+        return pack_result(lines, mode, segmenter, self.decoder_name, self.lm_loaded, self.lm_path)
+
+
+class TrocrRecognizer:
+    """Optional VisionEncoderDecoder. Not the default; the CRNN stays in front until it wins the eval set."""
+
+    def __init__(self, model_dir, device):
+        from transformers import TrOCRProcessor, VisionEncoderDecoderModel
+
+        if not os.path.isdir(model_dir):
+            raise FileNotFoundError(f"TrOCR directory not found: {model_dir}")
+        self.processor = TrOCRProcessor.from_pretrained(model_dir)
+        self.model = VisionEncoderDecoderModel.from_pretrained(model_dir).to(device)
+        self.model.eval()
+        self.device = device
+        self.model_dir = model_dir
+        self.decoder_name = f"trocr ({model_dir})"
+        self.lm_loaded = False
+        self.lm_path = None
+        self.enhanced = False
+        logger.info("Active decoder: %s", self.decoder_name)
+
+    def recognize_array(self, image):
+        from PIL import Image
+
+        if image.ndim == 2:
+            rgb = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+        else:
+            rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        pixels = self.processor(Image.fromarray(rgb), return_tensors="pt").pixel_values.to(self.device)
+        with torch.no_grad():
+            generated = self.model.generate(pixels)
+        text = self.processor.batch_decode(generated, skip_special_tokens=True)[0]
+        return normalize_bangla(" ".join(text.split()))
+
+    def _read_image(self, img_path):
+        img = cv2.imread(img_path, cv2.IMREAD_COLOR)
+        if img is None:
+            raise FileNotFoundError(img_path)
+        return img
+
+    def recognize_line_path(self, img_path):
+        return self.recognize_array(self._read_image(img_path))
+
+    def recognize(self, img_path, force_mode=None, detector_weights=None):
+        img = self._read_image(img_path)
+        if force_mode == "line" or (force_mode is None and looks_like_single_line(img)):
+            return pack_result([self.recognize_array(img)], "line", "none", self.decoder_name, False, None)
+        _page, line_imgs, segmenter = segment_page(img_path, detector_weights=detector_weights)
+        if not line_imgs:
+            return pack_result(
+                [self.recognize_array(img)], "page", f"{segmenter}+fallback_whole", self.decoder_name, False, None
+            )
+        lines = [self.recognize_array(line) for line in line_imgs]
+        return pack_result(lines, "page", segmenter, self.decoder_name, False, None)
+
+
+def main():
+    """CLI: python recognize.py --image line.jpg --checkpoint checkpoints\\best.pt"""
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    ap = argparse.ArgumentParser(description="Recognize a Bangla handwriting image")
+    ap.add_argument("--image", required=True)
+    ap.add_argument("--checkpoint", default=None)
+    ap.add_argument("--engine", choices=("crnn", "trocr"), default="crnn")
+    ap.add_argument("--trocr_dir", default=None)
+    ap.add_argument("--enhanced", action="store_true")
+    ap.add_argument("--sauvola", action="store_true")
+    args = ap.parse_args()
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if args.engine == "trocr":
+        if not args.trocr_dir:
+            ap.error("--engine trocr needs --trocr_dir")
+        recognizer = TrocrRecognizer(args.trocr_dir, device)
+    else:
+        if not args.checkpoint:
+            ap.error("--checkpoint is required for the CRNN")
+        ckpt = load_torch_checkpoint(args.checkpoint, device)
+        recognizer = build_crnn_recognizer(ckpt, device, enhanced=args.enhanced, sauvola=args.sauvola)
+    result = recognizer.recognize(args.image)
+    print(result["full_text"])
+    print(result["decoder"])
+
+
+if __name__ == "__main__":
+    main()

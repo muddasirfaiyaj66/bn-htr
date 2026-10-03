@@ -24,10 +24,12 @@ import gradio as gr
 import torch
 
 from decode import describe_decoder, find_lm_path, load_lm
-from recognize import build_crnn_recognizer, load_torch_checkpoint
+from recognize import TrocrRecognizer, build_crnn_recognizer, load_torch_checkpoint
 from segment_lines import resolve_detector_weights
 
 CHECKPOINT_PATH = "checkpoints/best.pt"
+ENGINE = os.environ.get("ENGINE", "crnn")
+TROCR_DIR = os.environ.get("TROCR_DIR")
 
 _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 _recognizer = None
@@ -38,10 +40,14 @@ def load_model():
     if _recognizer is not None:
         return
 
+    _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if ENGINE == "trocr":
+        if not TROCR_DIR:
+            raise FileNotFoundError("ENGINE=trocr needs TROCR_DIR. The default engine is crnn.")
+        _recognizer = TrocrRecognizer(TROCR_DIR, _device)
+        return
     if not os.path.exists(CHECKPOINT_PATH):
         raise FileNotFoundError(f"Checkpoint not found at {CHECKPOINT_PATH}.")
-
-    _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     ckpt = load_torch_checkpoint(CHECKPOINT_PATH, _device)
     _recognizer = build_crnn_recognizer(ckpt, _device)
 

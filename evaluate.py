@@ -199,6 +199,8 @@ def main():
     ap.add_argument("--sauvola", action="store_true", help="Sauvola threshold inside preprocess_line")
     ap.add_argument("--channel", default="auto")
     ap.add_argument("--tune_decode", action="store_true", help="Grid-search decoder settings on --samples_dir")
+    ap.add_argument("--engine", choices=("crnn", "trocr"), default="crnn")
+    ap.add_argument("--trocr_dir", default=None, help="Saved TrOCR directory. Used only with --engine trocr")
     args = ap.parse_args()
 
     if not args.test_csv and not args.samples_dir:
@@ -266,12 +268,17 @@ def main():
             print()
 
     if args.samples_dir:
-        from recognize import build_crnn_recognizer, load_torch_checkpoint
+        from recognize import TrocrRecognizer, build_crnn_recognizer, load_torch_checkpoint
 
-        rec_ckpt = load_torch_checkpoint(args.checkpoint, device)
-        recognizer = build_crnn_recognizer(
-            rec_ckpt, device, enhanced=args.enhanced, sauvola=args.sauvola, channel=args.channel
-        )
+        if args.engine == "trocr":
+            if not args.trocr_dir:
+                ap.error("--trocr_dir is required when --engine trocr")
+            recognizer = TrocrRecognizer(args.trocr_dir, device)
+        else:
+            rec_ckpt = load_torch_checkpoint(args.checkpoint, device)
+            recognizer = build_crnn_recognizer(
+                rec_ckpt, device, enhanced=args.enhanced, sauvola=args.sauvola, channel=args.channel
+            )
         metrics = evaluate_sample_dir(recognizer.recognize_line_path, args.samples_dir)
         print(f"\n=== Real samples ({metrics['n']} lines) ===")
         print(f"Character Error Rate (CER): {metrics['cer']:.4f}  ({metrics['cer']*100:.2f}%)")

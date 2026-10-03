@@ -25,7 +25,7 @@ import tempfile
 from flask import Flask, request, jsonify, render_template
 import torch
 
-from recognize import build_crnn_recognizer, load_torch_checkpoint
+from recognize import TrocrRecognizer, build_crnn_recognizer, load_torch_checkpoint
 from segment_lines import resolve_detector_weights
 
 _ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -168,16 +168,24 @@ def main():
     ap.add_argument("--checkpoint", default=None)
     ap.add_argument("--host", default=default_host)
     ap.add_argument("--port", type=int, default=default_port)
+    ap.add_argument("--engine", choices=("crnn", "trocr"), default=os.environ.get("ENGINE", "crnn"))
+    ap.add_argument("--trocr_dir", default=os.environ.get("TROCR_DIR"))
     args = ap.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-    checkpoint = resolve_checkpoint(args.checkpoint)
     _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    ckpt = load_torch_checkpoint(checkpoint, _device)
-    _recognizer = build_crnn_recognizer(ckpt, _device)
+    if args.engine == "trocr":
+        if not args.trocr_dir:
+            raise SystemExit("ENGINE=trocr needs TROCR_DIR or --trocr_dir. The default engine is crnn.")
+        _recognizer = TrocrRecognizer(args.trocr_dir, _device)
+        print(f"TrOCR: {args.trocr_dir}")
+    else:
+        checkpoint = resolve_checkpoint(args.checkpoint)
+        ckpt = load_torch_checkpoint(checkpoint, _device)
+        _recognizer = build_crnn_recognizer(ckpt, _device)
+        print(f"Checkpoint: {checkpoint}")
 
     detector = resolve_detector_weights()
-    print(f"Checkpoint: {checkpoint}")
     print(f"Decoder: {_recognizer.decoder_name}")
     print(f"Line detector: {detector or '(classical fallback)'}")
     print(f"Model loaded on {_device}. Serving on http://{args.host}:{args.port}")
