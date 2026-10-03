@@ -12,3 +12,4 @@ Ground truth: `কিংকর্তব্যবিমূঢ়`. Baseline predi
 | ink channel only | 0.2667 | 1.0000 | 0 | 0 | gray / min / green / Lab-L / auto all match the baseline prediction on this photo. |
 | decoder grid | 0.2667 | 1.0000 | 0 | 0 | Beam, LM weight, post-correction, and pyctcdecode unigrams (KenLM is not installed on Windows). Best tie is the current prefix beam. `decode_config.json` was left unchanged. The UI status now names the decoder instead of a bare segmenter `none`. |
 | unicode normalisation | 0.2667 | 1.0000 | 0 | 0 | NFC plus composed ড় ঢ় য় on labels and predictions. This sample was already composed, so CER did not move. Grapheme clusters would grow the vocab from 171 characters to 1394 and were not adopted, because that needs a retrain before CER can be measured. |
+| augmentation | 0.2667 | 1.0000 | 0 | 0 | New training augmentations and `synth_lines.py` do not change the current checkpoint. Inference CER stays on the legacy preprocess. |

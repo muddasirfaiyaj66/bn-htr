@@ -161,15 +161,61 @@ def preprocess_image(
     )
 
 
+def _to_gray(img):
+    if img.ndim == 2:
+        return img
+    if img.shape[2] == 4:
+        return cv2.cvtColor(img, cv2.COLOR_BGRA2GRAY)
+    return cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+
+def _augment_color(img):
+    """Recolour dark strokes as black, blue, or red ink on textured paper."""
+    gray = _to_gray(img)
+    height, width = gray.shape
+    paper = np.full((height, width, 3), random.randint(200, 245), np.uint8)
+    texture = np.random.normal(0, random.uniform(2, 8), paper.shape)
+    paper = np.clip(paper.astype(np.float32) + texture, 0, 255).astype(np.uint8)
+    ink = random.choice(((20, 20, 20), (140, 40, 20), (30, 30, 160)))
+    paper[gray < 170] = ink
+    top, bottom = random.randint(0, 8), random.randint(0, 8)
+    left, right = random.randint(0, 12), random.randint(0, 12)
+    canvas = np.full((height + top + bottom, width + left + right, 3), 235, np.uint8)
+    canvas[top : top + height, left : left + width] = paper
+    return canvas
+
+
+def _jpeg_roundtrip(img):
+    quality = random.randint(35, 90)
+    ok, buf = cv2.imencode(".jpg", img, [int(cv2.IMWRITE_JPEG_QUALITY), quality])
+    if not ok:
+        return img
+    flag = cv2.IMREAD_GRAYSCALE if img.ndim == 2 else cv2.IMREAD_COLOR
+    decoded = cv2.imdecode(buf, flag)
+    return img if decoded is None else decoded
+
+
 def _augment(img):
-    if img.ndim == 3:
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY if img.shape[2] == 3 else cv2.COLOR_BGRA2GRAY)
+    """Training-only geometry, blur, noise, JPEG, and coloured-ink simulation."""
+    if random.random() < 0.45:
+        img = _augment_color(img)
+    img = _to_gray(img)
     h, w = img.shape
 
     if random.random() < 0.6:
         angle = random.uniform(-3.0, 3.0)
         matrix = cv2.getRotationMatrix2D((w / 2, h / 2), angle, 1.0)
         img = cv2.warpAffine(img, matrix, (w, h), borderValue=255)
+
+    if random.random() < 0.35:
+        src = np.float32([[0, 0], [w - 1, 0], [w - 1, h - 1], [0, h - 1]])
+        jx = lambda: random.uniform(-0.05, 0.05) * w
+        jy = lambda: random.uniform(-0.08, 0.08) * h
+        dst = np.float32(
+            [[jx(), jy()], [w - 1 + jx(), jy()], [w - 1 + jx(), h - 1 + jy()], [jx(), h - 1 + jy()]]
+        )
+        matrix = cv2.getPerspectiveTransform(src, dst)
+        img = cv2.warpPerspective(img, matrix, (w, h), borderValue=255)
 
     if random.random() < 0.5:
         shear = random.uniform(-0.3, 0.3)
@@ -196,9 +242,29 @@ def _augment(img):
         beta = random.uniform(-18, 18)
         img = np.clip(img.astype(np.float32) * alpha + beta, 0, 255).astype(np.uint8)
 
+    if random.random() < 0.3:
+        kernel = random.choice((3, 5))
+        img = cv2.GaussianBlur(img, (kernel, kernel), 0)
+
+    if random.random() < 0.25:
+        length = random.choice((5, 7, 9))
+        kernel = np.zeros((length, length), np.float32)
+        kernel[length // 2, :] = 1.0 / length
+        img = cv2.filter2D(img, -1, kernel)
+
     if random.random() < 0.4:
         noise = np.random.normal(0, random.uniform(4, 12), img.shape)
         img = np.clip(img.astype(np.float32) + noise, 0, 255).astype(np.uint8)
+
+    if random.random() < 0.35:
+        img = _jpeg_roundtrip(img)
+
+    if random.random() < 0.3:
+        top, bottom = random.randint(0, 6), random.randint(0, 6)
+        left, right = random.randint(0, 10), random.randint(0, 10)
+        canvas = np.full((h + top + bottom, w + left + right), 255, np.uint8)
+        canvas[top : top + img.shape[0], left : left + img.shape[1]] = img
+        img = canvas
 
     return img
 
