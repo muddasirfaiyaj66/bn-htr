@@ -185,7 +185,7 @@ python decode.py --train_csv data/train.csv --out data/lm.json
 python evaluate.py --checkpoint checkpoints/best.pt --test_csv data/test.csv --beam
 ```
 
-Training augmentation includes rotation, slant, elastic warp, and noise. Deskew and illumination flattening are available for a future training run; they are left off at inference so the current grayscale checkpoint is unchanged.
+Training augmentation includes rotation, slant, perspective, elastic warp, blur, JPEG, noise, and random ink colour on paper. A checkpoint trained with `--clean` or `--binarize` applies that same deskew and Otsu step at inference.
 
 ### 6. Train the line detector
 
@@ -195,6 +195,48 @@ python train_line_detector.py --data data/yolo_lines/data.yaml --epochs 40
 ```
 
 Exports `checkpoints/line_detector.pt`. Without this file, page segmentation uses classical CV only.
+
+## Real photos, language model, and evaluation
+
+A page or line image is read in colour when the enhanced preprocessor is on, otherwise in grayscale. A wide, short image is treated as one line (`segmenter: none` in the UI — that word is the segmenter, not the language model). Taller pages go through the YOLO line detector, or ink projection if that file is missing. Each crop is resized to height 64 without stretching, padded on the right, and recognized by the CRNN. Decoding is CTC prefix beam search with the character trigram in `data/lm.json` when that file exists, and greedy CTC when it does not. The status line names the decoder, for example `ctc-prefix-beam+char-lm`.
+
+`--enhanced` and `--sauvola` turn on `preprocess.py` (ink channel, illumination, CLAHE, optional Sauvola, crop, deskew). On the current checkpoint those options did not beat the legacy preprocess, so the app leaves them off. `--engine trocr` loads a VisionEncoderDecoder; the default stays `crnn`.
+
+A line whose mean CTC log-probability is below `BNHTR_CONFIDENCE` (default `-1.0`) is marked `uncertain`. If both `VLM_API_URL` and `VLM_API_KEY` are set, that line can be sent to an OpenAI-compatible vision model. With either variable missing, nothing leaves the machine.
+
+### Build a word language model
+
+`build_lm.py` reads a UTF-8 text file or a CSV with a `text` column and writes an ARPA file, a unigram lexicon, and a JSON n-gram table. Order is 3, 4, or 5.
+
+Useful corpora, after you extract plain text (the script does not parse Wikipedia XML):
+
+- Bangla Wikipedia: https://dumps.wikimedia.org/bnwiki/latest/bnwiki-latest-pages-articles.xml.bz2
+- News text such as OSCAR or CC-100 Bangla, or any news CSV with a text column
+
+```bash
+python build_lm.py --corpus data\train.csv --order 3 --out data\word_lm
+python decode.py --train_csv data\train.csv --out data\lm.json
+```
+
+KenLM is used when the `kenlm` package imports. On Windows that package usually does not build, and decoding stays on the character-trigram beam. `pyctcdecode` can still apply the unigram list. Post-correction (`--post_correct`) replaces a word only when one lexicon neighbour within edit distance 2 has a clearly better language-model score.
+
+### Score a folder of real lines
+
+Put each line image next to a UTF-8 `.txt` of the same name. `tests/real_samples` is the checked-in red-ink example.
+
+```bash
+python evaluate.py --checkpoint checkpoints\best.pt --samples_dir tests\real_samples --out_json results\baseline.json
+python evaluate.py --checkpoint checkpoints\best.pt --samples_dir tests\real_samples --tune_decode
+python vocab.py --train_csv data\train.csv --val_csv data\val.csv --test_csv data\test.csv --graphemes --out results\grapheme_report.json
+```
+
+`results/log.md` records CER and WER after each change on that photo. The held-out writer CSV is still `python evaluate.py --checkpoint checkpoints\best.pt --test_csv data\test.csv`.
+
+Synthetic lines, for a later training run:
+
+```bash
+python synth_lines.py --corpus data\train.csv --out_dir data\synth --count 100
+```
 
 ## Inference
 
