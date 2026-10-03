@@ -18,6 +18,7 @@ Endpoints:
 """
 
 import argparse
+import logging
 import os
 import tempfile
 
@@ -77,6 +78,9 @@ def health():
             "device": str(_device),
             "line_detector": bool(detector),
             "line_detector_path": detector,
+            "decoder": None if _recognizer is None else _recognizer.decoder_name,
+            "lm_loaded": False if _recognizer is None else _recognizer.lm_loaded,
+            "lm_path": None if _recognizer is None else _recognizer.lm_path,
         }
     )
 
@@ -104,7 +108,14 @@ def recognize_line():
         return err
     try:
         result = _recognizer.recognize(tmp_path, force_mode="line")
-        return jsonify({"text": result["full_text"]})
+        return jsonify(
+            {
+                "text": result["full_text"],
+                "decoder": result.get("decoder"),
+                "lm_loaded": result.get("lm_loaded"),
+                "lm_path": result.get("lm_path"),
+            }
+        )
     finally:
         os.unlink(tmp_path)
 
@@ -159,6 +170,7 @@ def main():
     ap.add_argument("--port", type=int, default=default_port)
     args = ap.parse_args()
 
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     checkpoint = resolve_checkpoint(args.checkpoint)
     _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     ckpt = load_torch_checkpoint(checkpoint, _device)
@@ -166,6 +178,7 @@ def main():
 
     detector = resolve_detector_weights()
     print(f"Checkpoint: {checkpoint}")
+    print(f"Decoder: {_recognizer.decoder_name}")
     print(f"Line detector: {detector or '(classical fallback)'}")
     print(f"Model loaded on {_device}. Serving on http://{args.host}:{args.port}")
     app.run(host=args.host, port=args.port)

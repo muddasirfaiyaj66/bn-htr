@@ -815,9 +815,10 @@
         const lines = data.lines || (data.text != null ? [data.text] : []);
         state.lastText = data.full_text || data.text || lines.join("\n");
         const count = data.line_count != null ? data.line_count : lines.length;
-        const seg = data.segmenter ? ` · ${data.segmenter}` : "";
-        renderTranscript(lines, `${count} line${count === 1 ? "" : "s"}${seg}`);
-        setStatus(`Done · ${count} line${count === 1 ? "" : "s"}${seg} · ${kind}`);
+        const seg = data.segmenter ? ` · segmenter ${data.segmenter}` : "";
+        const dec = data.decoder ? ` · ${data.decoder}` : "";
+        renderTranscript(lines, `${count} line${count === 1 ? "" : "s"}${seg}${dec}`);
+        setStatus(`Done · ${count} line${count === 1 ? "" : "s"}${seg}${dec} · ${kind}`);
       } catch (err) {
         setStatus(err.message || "Something went wrong.", "error");
       } finally {

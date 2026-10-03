@@ -23,6 +23,7 @@ import os
 import gradio as gr
 import torch
 
+from decode import describe_decoder, find_lm_path, load_lm
 from recognize import build_crnn_recognizer, load_torch_checkpoint
 from segment_lines import resolve_detector_weights
 
@@ -74,6 +75,8 @@ def recognize_page(image_path):
 
 with gr.Blocks(title="Bangla Handwritten Text Recognition") as demo:
     detector = resolve_detector_weights()
+    _lm_path = find_lm_path()
+    _decoder_line = describe_decoder(load_lm(_lm_path) if _lm_path else None, _lm_path)
     gr.Markdown(
         "# Bangla Handwritten Text Recognition (BN-HTR)\n"
         "Upload a handwritten Bangla page or line image. "
@@ -84,6 +87,7 @@ with gr.Blocks(title="Bangla Handwritten Text Recognition") as demo:
             else "\n\nLine detector: classical CV "
             "(add `checkpoints/line_detector.pt` for YOLO)."
         )
+        + f"\n\nDecoder: {_decoder_line}"
     )
 
     with gr.Tab("Recognize"):

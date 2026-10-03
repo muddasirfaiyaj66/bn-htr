@@ -15,3 +15,7 @@ matplotlib
 flask
 ultralytics
 transformers
+rapidfuzz
+pyctcdecode
+# kenlm has no Windows wheel. The marker skips it here; Linux installs it when a compiler is available.
+kenlm; platform_system != "Windows"

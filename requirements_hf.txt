@@ -8,3 +8,5 @@ numpy
 scikit-learn
 pillow
 ultralytics
+# rapidfuzz, pyctcdecode, and kenlm are optional local decoding extras.
+# They are not imported at startup, so the Space still boots without them.

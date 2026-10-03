@@ -97,6 +97,79 @@ def evaluate_sample_dir(recognize_fn, folder):
     return metrics
 
 
+def tune_decoder(recognizer, folder):
+    """Grid-search beam, LM weight, post-correction, and pyctcdecode on cached logits."""
+    from decode import describe_decoder
+
+    cached = []
+    for path, target in load_sample_pairs(folder):
+        detail = recognizer.recognize_detail(recognizer._read_image(path))
+        cached.append((detail["log_probs"], detail["logits"], target))
+
+    settings = []
+    for beam in (8, 16, 32):
+        for weight in (0.0, 0.15, 0.3, 0.5):
+            for post in (False, True):
+                settings.append(
+                    {
+                        "decode_engine": "prefix",
+                        "beam_width": beam,
+                        "lm_weight": weight,
+                        "post_correct": post,
+                        "alpha": recognizer.alpha,
+                        "beta": recognizer.beta,
+                    }
+                )
+    for alpha in (0.3, 0.5, 0.8):
+        for beta in (0.5, 1.5):
+            for beam in (16, 32):
+                settings.append(
+                    {
+                        "decode_engine": "pyctc",
+                        "beam_width": beam,
+                        "lm_weight": recognizer.lm_weight,
+                        "post_correct": False,
+                        "alpha": alpha,
+                        "beta": beta,
+                    }
+                )
+
+    saved = {
+        name: getattr(recognizer, name)
+        for name in ("decode_engine", "beam_width", "lm_weight", "post_correct", "alpha", "beta")
+    }
+    best = None
+    rows = []
+    try:
+        for spec in settings:
+            for name, value in spec.items():
+                setattr(recognizer, name, value)
+            preds = [recognizer.decode_arrays(log_probs, logits) for log_probs, logits, _target in cached]
+            metrics = score_texts(preds, [target for _lp, _logits, target in cached])
+            row = {
+                **spec,
+                "cer": metrics["cer"],
+                "wer": metrics["wer"],
+                "prediction": preds[0] if len(preds) == 1 else preds,
+            }
+            rows.append(row)
+            better_cer = best is None or row["cer"] < best["cer"] - 1e-12
+            better_wer = best is not None and abs(row["cer"] - best["cer"]) < 1e-12 and row["wer"] < best["wer"] - 1e-12
+            if better_cer or better_wer:
+                best = row
+    finally:
+        for name, value in saved.items():
+            setattr(recognizer, name, value)
+        recognizer.decoder_name = describe_decoder(
+            recognizer.lm,
+            recognizer.lm_path,
+            beam_width=recognizer.beam_width,
+            post_correct=recognizer.post_correct,
+            engine=recognizer.decode_engine,
+        )
+    return best, rows
+
+
 def write_metrics(path, payload):
     os.makedirs(os.path.dirname(os.path.abspath(path)) or ".", exist_ok=True)
     with open(path, "w", encoding="utf-8") as handle:
@@ -124,6 +197,7 @@ def main():
     ap.add_argument("--enhanced", action="store_true", help="Score samples with preprocess_line")
     ap.add_argument("--sauvola", action="store_true", help="Sauvola threshold inside preprocess_line")
     ap.add_argument("--channel", default="auto")
+    ap.add_argument("--tune_decode", action="store_true", help="Grid-search decoder settings on --samples_dir")
     args = ap.parse_args()
 
     if not args.test_csv and not args.samples_dir:
@@ -217,6 +291,18 @@ def main():
         if args.out_json:
             write_metrics(args.out_json, payload)
             print(f"Wrote {args.out_json}")
+        if args.tune_decode:
+            best, rows = tune_decoder(recognizer, args.samples_dir)
+            tune_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results", "decode_tune.json")
+            write_metrics(tune_path, {"best": best, "rows": rows, "baseline_cer": metrics["cer"]})
+            print(f"Best decode CER {best['cer']:.4f} WER {best['wer']:.4f} with {best['decode_engine']}")
+            print(f"Wrote {tune_path}")
+            if best["cer"] < metrics["cer"] - 1e-12:
+                config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "decode_config.json")
+                write_metrics(config_path, best)
+                print(f"Saved improved settings to {config_path}")
+            else:
+                print("No decoder setting beat the current baseline. decode_config.json was not changed.")
 
 
 if __name__ == "__main__":

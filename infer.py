@@ -9,12 +9,13 @@ Usage:
 """
 
 import argparse
+import logging
 import os
 
 import torch
 
 from dataset import IMG_MAX_WIDTH_INFER, preprocess_image
-from decode import decode_log_probs, load_lm, logits_to_log_probs
+from decode import correct_with_lm, decode_log_probs, describe_decoder, find_lm_path, load_lm, logits_to_log_probs
 from model import CRNN
 
 
@@ -39,7 +40,9 @@ def main():
     ap.add_argument("--enhanced", action="store_true", help="Use preprocess.preprocess_line (colour ink, CLAHE, crop)")
     ap.add_argument("--sauvola", action="store_true", help="Sauvola-binarize inside the enhanced preprocessor")
     ap.add_argument("--channel", default="auto", help="Ink channel: auto, gray, min, green, lab_l")
+    ap.add_argument("--post_correct", action="store_true", help="Lexicon edit-distance rescoring")
     args = ap.parse_args()
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     ckpt = torch.load(args.checkpoint, map_location=device)
@@ -51,6 +54,7 @@ def main():
     model.load_state_dict(ckpt["model_state"])
     model.eval()
     lm = None if args.greedy else load_lm(args.lm)
+    print(describe_decoder(lm, find_lm_path(args.lm), beam_width=1 if args.greedy or lm is None else 8, post_correct=args.post_correct))
 
     clean = bool(ckpt.get("clean", False))
     binarize = bool(ckpt.get("binarize", False))
@@ -71,9 +75,13 @@ def main():
         with torch.no_grad():
             logits = model(tensor)[0]  # (T, C)
         if lm is None:
-            return ctc_greedy_decode_single(logits, idx2char)
-        log_probs = logits_to_log_probs(logits.detach().float().cpu().numpy())
-        return decode_log_probs(log_probs, idx2char, lm=lm)
+            text = ctc_greedy_decode_single(logits, idx2char)
+        else:
+            log_probs = logits_to_log_probs(logits.detach().float().cpu().numpy())
+            text = decode_log_probs(log_probs, idx2char, lm=lm, lexicon=not args.post_correct)
+        if args.post_correct and lm is not None:
+            text = correct_with_lm(text, lm)
+        return text
 
     if args.image:
         print(recognize(args.image))
