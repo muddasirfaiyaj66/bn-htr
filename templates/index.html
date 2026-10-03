@@ -817,8 +817,10 @@
         const count = data.line_count != null ? data.line_count : lines.length;
         const seg = data.segmenter ? ` · segmenter ${data.segmenter}` : "";
         const dec = data.decoder ? ` · ${data.decoder}` : "";
-        renderTranscript(lines, `${count} line${count === 1 ? "" : "s"}${seg}${dec}`);
-        setStatus(`Done · ${count} line${count === 1 ? "" : "s"}${seg}${dec} · ${kind}`);
+        const unsure = Array.isArray(data.uncertain) && data.uncertain.some(Boolean) ? " · uncertain" : "";
+        const vlm = data.vlm && data.vlm !== "off" ? ` · vlm ${data.vlm}` : "";
+        renderTranscript(lines, `${count} line${count === 1 ? "" : "s"}${seg}${dec}${unsure}`);
+        setStatus(`Done · ${count} line${count === 1 ? "" : "s"}${seg}${dec}${unsure}${vlm} · ${kind}`);
       } catch (err) {
         setStatus(err.message || "Something went wrong.", "error");
       } finally {

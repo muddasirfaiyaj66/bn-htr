@@ -33,6 +33,18 @@ def logsumexp(a, b):
     return a + math.log1p(math.exp(b - a))
 
 
+def ctc_confidence(log_probs):
+    """Mean log-probability of the greedy non-blank labels. Closer to zero is more confident."""
+    arr = np.asarray(log_probs, dtype=np.float64)
+    if arr.size == 0:
+        return -10.0
+    pred = arr.argmax(axis=1)
+    chosen = arr[np.arange(arr.shape[0]), pred]
+    ink = pred != 0
+    values = chosen[ink] if np.any(ink) else chosen
+    return float(values.mean())
+
+
 def logits_to_log_probs(logits):
     """logits: numpy (T, C) or (B, T, C)."""
     arr = np.asarray(logits, dtype=np.float64)

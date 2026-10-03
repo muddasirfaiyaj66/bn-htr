@@ -4,6 +4,7 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 
@@ -15,11 +16,13 @@ from build_lm import count_ngrams, read_corpus, write_arpa, write_lexicon  # noq
 from decode import (  # noqa: E402
     CharLM,
     correct_with_lm,
+    ctc_confidence,
     ctc_prefix_beam_decode,
     describe_decoder,
     pyctc_decode,
     score_text,
 )
+from recognize import maybe_vlm_correct  # noqa: E402
 from normalize import normalize_bangla  # noqa: E402
 from vocab import grapheme_clusters  # noqa: E402
 
@@ -89,6 +92,21 @@ class DecodeTest(unittest.TestCase):
             with open(lexicon, "r", encoding="utf-8") as handle:
                 words = handle.read()
             self.assertIn("কিং", words)
+
+    def test_confidence_is_higher_on_a_peaked_path(self):
+        peaked = np.full((4, 3), -8.0)
+        peaked[:, 1] = -0.05
+        flat = np.full((4, 3), -2.0)
+        self.assertGreater(ctc_confidence(peaked), ctc_confidence(flat))
+
+    def test_vlm_stays_off_unless_configured(self):
+        image = np.full((8, 8), 255, np.uint8)
+        with patch.dict(os.environ, {"VLM_API_URL": "", "VLM_API_KEY": ""}, clear=False):
+            self.assertIsNone(maybe_vlm_correct(image, "ক"))
+        with patch.dict(os.environ, {"VLM_API_URL": "http://127.0.0.1:9/v1", "VLM_API_KEY": ""}, clear=False):
+            with patch("urllib.request.urlopen") as opened:
+                self.assertIsNone(maybe_vlm_correct(image, "ক"))
+                opened.assert_not_called()
 
     def test_pyctcdecode_accepts_hotwords(self):
         logits = np.full((6, 3), -5.0, dtype=np.float32)

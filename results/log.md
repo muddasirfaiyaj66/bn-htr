@@ -14,3 +14,4 @@ Ground truth: `কিংকর্তব্যবিমূঢ়`. Baseline predi
 | unicode normalisation | 0.2667 | 1.0000 | 0 | 0 | NFC plus composed ড় ঢ় য় on labels and predictions. This sample was already composed, so CER did not move. Grapheme clusters would grow the vocab from 171 characters to 1394 and were not adopted, because that needs a retrain before CER can be measured. |
 | augmentation | 0.2667 | 1.0000 | 0 | 0 | New training augmentations and `synth_lines.py` do not change the current checkpoint. Inference CER stays on the legacy preprocess. |
 | TrOCR engine | 1.2000 | 3.0000 | +0.9333 | +2.0000 | Saved TrOCR on this photo predicted `নিয়েছিলেছিলেন তিনি ।`. Worse than the CRNN, so `--engine` stays `crnn`. |
+| confidence / VLM | 0.2667 | 1.0000 | 0 | 0 | CTC confidence on this photo is -0.137, which is above the -1.0 uncertain cutoff, so the wrong guess is kept. A vision-language fallback runs only when `VLM_API_URL` and `VLM_API_KEY` are both set. |

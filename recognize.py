@@ -17,6 +17,7 @@ import torch
 from dataset import IMG_MAX_WIDTH_INFER, preprocess_array
 from decode import (
     correct_with_lm,
+    ctc_confidence,
     decode_log_probs,
     describe_decoder,
     find_lm_path,
@@ -28,6 +29,56 @@ from infer import ctc_greedy_decode_single
 from model import CRNN
 from normalize import normalize_bangla
 from segment_lines import looks_like_single_line, segment_page
+
+
+def maybe_vlm_correct(image, draft: str):
+    """
+    Ask a vision-language model to reread one uncertain line.
+
+    Returns None unless both VLM_API_URL and VLM_API_KEY are set. Nothing is
+    uploaded in the default configuration.
+    """
+    url = os.environ.get("VLM_API_URL", "").strip()
+    key = os.environ.get("VLM_API_KEY", "").strip()
+    if not url or not key:
+        return None
+    import base64
+    import json
+    import urllib.request
+
+    ok, buf = cv2.imencode(".jpg", image)
+    if not ok:
+        return None
+    encoded = base64.b64encode(buf.tobytes()).decode("ascii")
+    model_name = os.environ.get("VLM_MODEL", "gpt-4o-mini")
+    body = {
+        "model": model_name,
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Read the Bangla handwriting. Return only the corrected line. Draft: " + (draft or ""),
+                    },
+                    {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + encoded}},
+                ],
+            }
+        ],
+    }
+    request = urllib.request.Request(
+        url,
+        data=json.dumps(body).encode("utf-8"),
+        headers={"Authorization": "Bearer " + key, "Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        return str(payload["choices"][0]["message"]["content"]).strip()
+    except Exception as exc:
+        logger.info("VLM correction failed and the draft was kept: %s", exc)
+        return None
 
 
 def pack_result(lines, mode, segmenter, decoder, lm_loaded, lm_path):
@@ -104,6 +155,7 @@ class Recognizer:
         self.beta = beta
         self.hotwords = list(hotwords or [])
         self.kenlm_path = kenlm_path
+        self.confidence_threshold = float(os.environ.get("BNHTR_CONFIDENCE", "-1.0"))
         self.lm_loaded = self.lm is not None
         self.decoder_name = describe_decoder(
             self.lm, self.lm_path, beam_width=self.beam_width, post_correct=self.post_correct, engine=self.decode_engine
@@ -165,7 +217,7 @@ class Recognizer:
         logits = logits_t.detach().float().cpu().numpy()
         log_probs = logits_to_log_probs(logits)
         text = self.decode_arrays(log_probs, logits)
-        return {"text": text, "logits": logits, "log_probs": log_probs}
+        return {"text": text, "logits": logits, "log_probs": log_probs, "confidence": ctc_confidence(log_probs)}
 
     def recognize_array(self, gray_img):
         return self.recognize_detail(gray_img)["text"]
@@ -192,19 +244,40 @@ class Recognizer:
         if force_mode == "line" or (
             force_mode is None and looks_like_single_line(img)
         ):
-            text = self.recognize_array(img)
-            return self._pack([text], "line", "none")
+            return self._finish([self.recognize_detail(img)], [img], "line", "none")
 
         _, line_imgs, segmenter = segment_page(
             img_path, detector_weights=detector_weights
         )
 
         if not line_imgs:
-            text = self.recognize_array(img)
-            return self._pack([text], "page", f"{segmenter}+fallback_whole")
+            return self._finish([self.recognize_detail(img)], [img], "page", f"{segmenter}+fallback_whole")
 
-        results = [self.recognize_array(line) for line in line_imgs]
-        return self._pack(results, "page", segmenter)
+        details = [self.recognize_detail(line) for line in line_imgs]
+        return self._finish(details, line_imgs, "page", segmenter)
+
+    def _finish(self, details, images, mode, segmenter):
+        texts = []
+        confidences = []
+        uncertain = []
+        vlm = "off"
+        for detail, image in zip(details, images):
+            text = detail["text"]
+            confidence = float(detail["confidence"])
+            flag = confidence < self.confidence_threshold
+            if flag:
+                corrected = maybe_vlm_correct(image, text)
+                if corrected:
+                    text = normalize_bangla(corrected)
+                    vlm = "used"
+            texts.append(text)
+            confidences.append(confidence)
+            uncertain.append(flag)
+        payload = self._pack(texts, mode, segmenter)
+        payload["confidence"] = confidences
+        payload["uncertain"] = uncertain
+        payload["vlm"] = vlm
+        return payload
 
     def _pack(self, lines, mode, segmenter):
         return pack_result(lines, mode, segmenter, self.decoder_name, self.lm_loaded, self.lm_path)
