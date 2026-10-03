@@ -120,12 +120,19 @@ def main():
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.5, patience=3)
+    print(
+        "Learning rate: "
+        f"{optimizer.param_groups[0]['lr']:.6g}  "
+        "schedule=ReduceLROnPlateau  factor=0.5  patience=3  "
+        "(halves when validation CER does not improve for 3 epochs)"
+    )
     best_cer = float("inf")
 
     for epoch in range(args.epochs):
         model.train()
         epoch_loss = 0.0
         t0 = time.time()
+        lr = optimizer.param_groups[0]["lr"]
         pbar = tqdm(train_loader, desc=f"Attention {epoch + 1}/{args.epochs}")
         for imgs, targets, _texts in pbar:
             imgs = imgs.to(device)
@@ -141,14 +148,17 @@ def main():
             torch.nn.utils.clip_grad_norm_(model.parameters(), 5.0)
             optimizer.step()
             epoch_loss += loss.item()
-            pbar.set_postfix(loss=loss.item())
+            pbar.set_postfix(loss=f"{loss.item():.4f}", lr=f"{lr:.6g}")
 
         cer, wer = evaluate(model, val_loader, idx2char, device)
-        scheduler.step(cer)
         print(
-            f"Epoch {epoch + 1}: train_loss={epoch_loss / len(train_loader):.4f}  "
+            f"Epoch {epoch + 1}: lr={lr:.6g}  train_loss={epoch_loss / len(train_loader):.4f}  "
             f"val_CER={cer:.4f}  val_WER={wer:.4f}  time={time.time() - t0:.1f}s"
         )
+        scheduler.step(cer)
+        next_lr = optimizer.param_groups[0]["lr"]
+        if next_lr < lr:
+            print(f"  -> Learning rate reduced to {next_lr:.6g}")
         ckpt = {
             "epoch": epoch,
             "model_state": model.state_dict(),

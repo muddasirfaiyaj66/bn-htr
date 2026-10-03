@@ -64,7 +64,7 @@ def _save_upload():
 
 @app.route("/", methods=["GET"])
 def index():
-    return render_template("index.html", ui_version="2026-08-31-nav2")
+    return render_template("index.html", ui_version="2026-10-03-studio")
 
 
 @app.route("/health", methods=["GET", "OPTIONS"])

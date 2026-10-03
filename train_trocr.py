@@ -180,6 +180,7 @@ def main():
     )
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
+    print(f"Learning rate: {optimizer.param_groups[0]['lr']:.6g}  schedule=constant")
     use_amp = device.type == "cuda" and not args.no_amp
     scaler = torch.amp.GradScaler("cuda", enabled=use_amp)
     best_cer = float("inf")
@@ -188,6 +189,7 @@ def main():
         model.train()
         epoch_loss = 0.0
         t0 = time.time()
+        lr = optimizer.param_groups[0]["lr"]
         pbar = tqdm(train_loader, desc=f"TrOCR {epoch + 1}/{args.epochs}")
         for pixels, labels, _texts in pbar:
             pixels = pixels.to(device)
@@ -201,14 +203,14 @@ def main():
             scaler.step(optimizer)
             scaler.update()
             epoch_loss += loss.item()
-            pbar.set_postfix(loss=loss.item())
+            pbar.set_postfix(loss=f"{loss.item():.4f}", lr=f"{lr:.6g}")
 
         model.save_pretrained(os.path.join(args.out_dir, "last"))
         processor.save_pretrained(os.path.join(args.out_dir, "last"))
 
         cer, wer = evaluate(model, processor, val_loader, device, args.max_length)
         print(
-            f"Epoch {epoch + 1}: train_loss={epoch_loss / len(train_loader):.4f}  "
+            f"Epoch {epoch + 1}: lr={lr:.6g}  train_loss={epoch_loss / len(train_loader):.4f}  "
             f"val_CER={cer:.4f}  val_WER={wer:.4f}  time={time.time() - t0:.1f}s"
         )
         if cer < best_cer:

@@ -142,6 +142,12 @@ def main():
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.5, patience=4)
     criterion = torch.nn.CTCLoss(blank=0, zero_infinity=True)
+    print(
+        "Learning rate: "
+        f"{optimizer.param_groups[0]['lr']:.6g}  "
+        "schedule=ReduceLROnPlateau  factor=0.5  patience=4  "
+        "(halves when validation CER does not improve for 4 epochs)"
+    )
 
     start_epoch = 0
     best_cer = float("inf")
@@ -167,6 +173,7 @@ def main():
         epoch_loss = 0.0
         t0 = time.time()
 
+        lr = optimizer.param_groups[0]["lr"]
         pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{args.epochs}")
         for imgs, labels_concat, label_lengths, texts in pbar:
             imgs = imgs.to(device)
@@ -185,14 +192,19 @@ def main():
             optimizer.step()
 
             epoch_loss += loss.item()
-            pbar.set_postfix(loss=loss.item())
+            pbar.set_postfix(loss=f"{loss.item():.4f}", lr=f"{lr:.6g}")
 
         avg_loss = epoch_loss / len(train_loader)
         cer, wer = evaluate(model, val_loader, idx2char, device)
-        scheduler.step(cer)
         elapsed = time.time() - t0
-
-        print(f"Epoch {epoch+1}: train_loss={avg_loss:.4f}  val_CER={cer:.4f}  val_WER={wer:.4f}  time={elapsed:.1f}s")
+        print(
+            f"Epoch {epoch+1}: lr={lr:.6g}  train_loss={avg_loss:.4f}  "
+            f"val_CER={cer:.4f}  val_WER={wer:.4f}  time={elapsed:.1f}s"
+        )
+        scheduler.step(cer)
+        next_lr = optimizer.param_groups[0]["lr"]
+        if next_lr < lr:
+            print(f"  -> Learning rate reduced to {next_lr:.6g}")
 
         ckpt = {
             "epoch": epoch,

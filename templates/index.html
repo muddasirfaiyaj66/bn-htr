@@ -13,15 +13,17 @@
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@400;500;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
     :root {
-      --ink: #121a16;
-      --muted: #5e6e66;
+      --ink: #1a1916;
+      --muted: #6b675f;
       --panel: #ffffff;
-      --canvas: #e9efeb;
-      --accent: #0a6448;
-      --accent-deep: #074833;
-      --accent-soft: rgba(10, 100, 72, 0.09);
-      --danger: #b42318;
-      --rule: rgba(18, 26, 22, 0.1);
+      --canvas: #f3f1ec;
+      --accent: #0c5c45;
+      --accent-deep: #084434;
+      --accent-soft: #e7f3ee;
+      --danger: #9f2d22;
+      --warn: #8a5a12;
+      --rule: rgba(26, 25, 22, 0.1);
+      --shadow: 0 1px 2px rgba(26, 25, 22, 0.04), 0 12px 32px rgba(26, 25, 22, 0.06);
       --font-brand: "Instrument Serif", Georgia, serif;
       --font-ui: "Manrope", system-ui, sans-serif;
       --font-bn: "Noto Sans Bengali", "Manrope", sans-serif;
@@ -43,35 +45,59 @@
     .app {
       flex: 1;
       display: grid;
-      grid-template-rows: auto auto 1fr auto;
-      min-height: 100vh;
+      grid-template-areas:
+        "top"
+        "status"
+        "work"
+        "foot";
+      grid-template-rows: auto auto minmax(0, 1fr) auto;
+      height: 100vh;
       width: 100%;
       margin: 0;
     }
+
+    .top { grid-area: top; }
+    .status { grid-area: status; }
+    .compare { grid-area: work; }
+    .site-footer { grid-area: foot; }
 
     .top {
       display: grid;
       grid-template-columns: minmax(220px, 1fr) auto;
       align-items: center;
-      gap: 1.5rem 2rem;
-      padding: 1.1rem 1.75rem;
+      gap: 1rem 1.5rem;
+      padding: 0.85rem 1.25rem;
       background: var(--panel);
       border-bottom: 1px solid var(--rule);
     }
 
     .brand {
       display: flex;
-      flex-direction: column;
-      gap: 0.28rem;
+      align-items: center;
+      gap: 0.8rem;
       min-width: 0;
+    }
+
+    .mark {
+      width: 2.15rem;
+      height: 2.15rem;
+      border-radius: 8px;
+      background: var(--accent);
+      color: #fff;
+      display: grid;
+      place-items: center;
+      font-family: var(--font-brand);
+      font-size: 1.25rem;
+      line-height: 1;
+      flex: 0 0 auto;
     }
 
     .brand h1 {
       margin: 0;
       font-family: var(--font-brand);
-      font-size: 2rem;
+      font-size: 1.55rem;
       font-weight: 400;
-      letter-spacing: -0.025em;
+      letter-spacing: -0.03em;
       line-height: 1;
     }
 
@@ -81,9 +107,12 @@
     }
 
     .brand span {
+      display: block;
+      margin-top: 0.2rem;
       color: var(--muted);
-      font-size: 0.88rem;
-      line-height: 1.3;
+      font-size: 0.78rem;
+      letter-spacing: 0.01em;
+      line-height: 1.2;
     }
 
     .top-actions {
@@ -97,23 +126,31 @@
     .api-wrap {
       display: flex;
       align-items: center;
-      gap: 0.55rem;
-      padding: 0.35rem;
-      background: #f4f8f6;
+      gap: 0.35rem;
+      padding: 0.25rem 0.25rem 0.25rem 0.75rem;
+      background: #faf9f6;
       border: 1px solid var(--rule);
-      border-radius: 12px;
+      border-radius: 10px;
+    }
+
+    .api-wrap label {
+      color: var(--muted);
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
     }
 
     .api-wrap input {
-      width: min(280px, 36vw);
+      width: min(240px, 28vw);
       border: 0;
       border-radius: 8px;
-      padding: 0.62rem 0.85rem;
-      font: 500 0.86rem var(--font-ui);
+      padding: 0.48rem 0.35rem;
+      font: 500 0.82rem var(--font-ui);
       background: transparent;
       color: var(--ink);
       outline: none;
-      min-width: 160px;
+      min-width: 140px;
     }
 
     .api-wrap input:focus {
@@ -128,25 +165,29 @@
 
     .btn {
       border: 0;
-      border-radius: 10px;
-      font: 650 0.88rem var(--font-ui);
-      padding: 0.68rem 1.15rem;
+      border-radius: 8px;
+      font: 650 0.82rem var(--font-ui);
+      padding: 0.52rem 0.9rem;
       cursor: pointer;
-      transition: background 0.15s ease, opacity 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+      transition: background 0.15s ease, opacity 0.15s ease, border-color 0.15s ease;
       white-space: nowrap;
     }
 
-    .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+    .btn:focus-visible,
+    .drop:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .btn:disabled { opacity: 0.38; cursor: not-allowed; }
 
     .btn-primary {
       background: var(--accent);
       color: #fff;
-      box-shadow: 0 6px 16px rgba(10, 100, 72, 0.22);
     }
 
     .btn-primary:hover:not(:disabled) {
       background: var(--accent-deep);
-      transform: translateY(-1px);
     }
 
     .btn-ghost {
@@ -156,8 +197,8 @@
     }
 
     .btn-ghost:hover:not(:disabled) {
-      background: #f3f7f4;
-      border-color: rgba(10, 100, 72, 0.28);
+      background: #f6f4ef;
+      border-color: rgba(26, 25, 22, 0.18);
     }
 
     .api-wrap .btn-ghost {
@@ -166,23 +207,27 @@
     }
 
     .status {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.4rem;
       width: 100%;
-      padding: 0.55rem 1.75rem;
-      font-size: 0.84rem;
+      min-height: 2.35rem;
+      padding: 0.4rem 1.25rem;
+      font-size: 0.8rem;
       color: var(--muted);
-      background: #f7faf8;
+      background: #faf9f6;
       border-bottom: 1px solid var(--rule);
     }
 
-    .status:empty { display: none; padding: 0; border: 0; }
-    .status.error { color: var(--danger); background: #fdf6f5; }
-    .status.busy { color: var(--accent-deep); font-weight: 600; }
+    .status:empty { display: none; padding: 0; min-height: 0; border: 0; }
+    .status.error { color: var(--danger); background: #fdf6f4; }
+    .status.busy { color: var(--accent-deep); font-weight: 650; }
 
     .compare {
       display: grid;
       grid-template-columns: 1fr 1fr;
       min-height: 0;
-      height: 100%;
     }
 
     .col {
@@ -202,9 +247,9 @@
       align-items: center;
       justify-content: space-between;
       gap: 0.75rem;
-      padding: 0.8rem 1.35rem;
+      padding: 0.7rem 1.15rem;
       border-bottom: 1px solid var(--rule);
-      background: #f7faf8;
+      background: #faf9f6;
     }
 
     .col-label strong {
@@ -230,6 +275,7 @@
       min-height: 0;
       overflow: auto;
       position: relative;
+      background: #f3f1ec;
     }
 
     /* Source */
@@ -237,12 +283,34 @@
       min-height: 100%;
       display: grid;
       place-items: center;
-      padding: 1rem;
+      padding: 1.25rem;
       cursor: pointer;
-      background: #f4f7f5;
+      background:
+        linear-gradient(180deg, #f7f6f2 0%, #f3f1ec 100%);
     }
 
     .drop.dragover { background: var(--accent-soft); }
+
+    .drop-card {
+      width: min(22rem, 100%);
+      padding: 1.6rem 1.4rem 1.4rem;
+      text-align: center;
+      border: 1px dashed rgba(26, 25, 22, 0.22);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.72);
+      pointer-events: none;
+    }
+
+    .drop-icon {
+      width: 2.4rem;
+      height: 2.4rem;
+      margin: 0 auto 0.75rem;
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
 
     .drop input {
       position: absolute;
@@ -255,17 +323,17 @@
       text-align: center;
       pointer-events: none;
       color: var(--muted);
-      max-width: 15rem;
     }
 
     .drop-idle strong {
       display: block;
       color: var(--ink);
-      font-size: 1rem;
-      margin-bottom: 0.35rem;
+      font-size: 0.98rem;
+      font-weight: 700;
+      margin-bottom: 0.3rem;
     }
 
-    .drop-idle span { font-size: 0.88rem; line-height: 1.4; }
+    .drop-idle span { font-size: 0.82rem; line-height: 1.45; }
 
     .preview {
       display: none;
@@ -274,7 +342,7 @@
       padding: 1.25rem;
       align-items: flex-start;
       justify-content: center;
-      background: #f4f7f5;
+      background: #f3f1ec;
     }
 
     .preview.show { display: flex; }
@@ -284,9 +352,10 @@
       height: auto;
       max-width: 100%;
       object-fit: contain;
-      border-radius: 4px;
-      box-shadow: 0 10px 30px rgba(18, 26, 22, 0.12);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
       background: #fff;
+      border: 1px solid var(--rule);
     }
 
     /* Transcript — reading-first */
@@ -305,9 +374,13 @@
 
     .transcript {
       display: none;
-      padding: 1.5rem 1.75rem 2.5rem;
-      max-width: 42rem;
-      margin: 0 auto;
+      max-width: 40rem;
+      margin: 1.25rem auto 2rem;
+      padding: 0.35rem 1.15rem 0.5rem;
+      background: #fff;
+      border: 1px solid var(--rule);
+      border-radius: 12px;
+      box-shadow: var(--shadow);
     }
 
     .transcript.show { display: block; }
@@ -343,11 +416,12 @@
     }
 
     .site-footer {
-      padding: 0.9rem 1.75rem;
+      padding: 0.7rem 1.25rem;
       text-align: center;
       background: var(--panel);
       border-top: 1px solid var(--rule);
-      font-size: 0.86rem;
+      font-size: 0.78rem;
+      letter-spacing: 0.01em;
       color: var(--muted);
     }
 
@@ -397,12 +471,16 @@
   <div class="app">
     <header class="top">
       <div class="brand">
-        <h1>BN-<em>HTR</em></h1>
-        <span>Bangla handwriting recognition</span>
+        <div class="mark" aria-hidden="true">ব</div>
+        <div>
+          <h1>BN-<em>HTR</em></h1>
+          <span>Bangla handwriting recognition</span>
+        </div>
       </div>
       <div class="top-actions">
         <div class="api-wrap">
-          <input id="baseUrl" type="url" spellcheck="false" autocomplete="off" placeholder="API URL (optional)" aria-label="API base URL" />
+          <label for="baseUrl">API</label>
+          <input id="baseUrl" type="url" spellcheck="false" autocomplete="off" placeholder="Local" aria-label="API base URL" />
           <button class="btn btn-ghost" id="testBtn" type="button">Test</button>
         </div>
         <div class="action-group">
@@ -424,8 +502,16 @@
           <div class="drop" id="dropzone" tabindex="0" role="button" aria-label="Choose image">
             <input id="file" type="file" accept="image/*" />
             <div class="drop-idle" id="dropIdle">
-              <strong>Drop page or line image</strong>
-              <span>JPG / PNG — then press Recognize</span>
+              <div class="drop-card">
+                <div class="drop-icon" aria-hidden="true">
+                  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                    <path d="M9 12.5V3.5M9 3.5L5.5 7M9 3.5L12.5 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M3 12.5V14.2C3 14.9 3.6 15.5 4.3 15.5H13.7C14.4 15.5 15 14.9 15 14.2V12.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                  </svg>
+                </div>
+                <strong>Drop a page or a line</strong>
+                <span>JPG or PNG. Recognition starts when you press Recognize.</span>
+              </div>
             </div>
             <div class="preview" id="preview">
               <img id="previewImg" alt="Handwritten source" />
@@ -522,6 +608,7 @@
     baseUrlInput.addEventListener("blur", () => { state.apiKind = null; persistBaseUrl(); });
 
     function setStatus(msg, kind = "") {
+      statusEl.replaceChildren();
       statusEl.textContent = msg || "";
       statusEl.className = "status" + (kind ? " " + kind : "");
     }
@@ -815,12 +902,10 @@
         const lines = data.lines || (data.text != null ? [data.text] : []);
         state.lastText = data.full_text || data.text || lines.join("\n");
         const count = data.line_count != null ? data.line_count : lines.length;
-        const seg = data.segmenter ? ` · segmenter ${data.segmenter}` : "";
-        const dec = data.decoder ? ` · ${data.decoder}` : "";
-        const unsure = Array.isArray(data.uncertain) && data.uncertain.some(Boolean) ? " · uncertain" : "";
-        const vlm = data.vlm && data.vlm !== "off" ? ` · vlm ${data.vlm}` : "";
-        renderTranscript(lines, `${count} line${count === 1 ? "" : "s"}${seg}${dec}${unsure}`);
-        setStatus(`Done · ${count} line${count === 1 ? "" : "s"}${seg}${dec}${unsure}${vlm} · ${kind}`);
+        const unsure = Array.isArray(data.uncertain) && data.uncertain.some(Boolean);
+        const lineLabel = `${count} line${count === 1 ? "" : "s"}`;
+        renderTranscript(lines, unsure ? `${lineLabel} · review` : lineLabel);
+        setStatus("");
       } catch (err) {
         setStatus(err.message || "Something went wrong.", "error");
       } finally {
